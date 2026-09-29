@@ -1,0 +1,23 @@
+# Claude Code local session/config data — machine-specific, not shared config
+.claude/
+
+# Internal Claude Code guidance doc — kept locally for continuity across
+# sessions, but not pushed to the shared repo (README.md is the doc for that)
+CLAUDE.md
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local lint/analysis config
+biome.json
+.pi-lens.json
+
+# Logs
+*.log
