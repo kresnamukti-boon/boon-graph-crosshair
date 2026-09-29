@@ -245,39 +245,35 @@ function legAngleClient(vertices, startDirection, transform, frameSize, frameRec
   return Math.atan2(dy, dx);
 }
 
-// The crosshair itself: two perpendicular segments centered on `center`
-// (whatever pixel space the caller is drawing in — CSS or canvas-backing —
-// as long as widthPx is in the same space), each spanning exactly widthPx —
-// so either arm's two ends can be sat directly on the duct's two drawn edge
-// lines at the corner. `angleRad` rotates the "across" arm to sit
-// perpendicular to the run's own direction (the arm that actually needs to
-// land on the two parallel duct walls); axis-aligned (0 rad) when the
-// direction isn't known. Both arms are drawn at the same length rather than
-// only the perpendicular one, so the guide still reads as a normal crosshair
-// (not a single rotated bar) and remains useful even if the direction guess
-// is wrong.
-function crosshairSegments(center, widthPx, angleRad) {
-  const half = widthPx / 2;
+// The crosshair itself: two perpendicular BANDS (thick lines, not hairlines)
+// crossing at `center` (whatever pixel space the caller is drawing in — CSS
+// or canvas-backing — as long as thicknessPx/spanPx are in the same space).
+// Each band is `thicknessPx` thick (the duct's own true on-screen width) and
+// `spanPx` long, centered on `center` — `spanPx` is the CALLER's job to make
+// large enough (e.g. the overlay canvas's own diagonal, doubled) that both
+// bands visibly run off every edge of the canvas regardless of rotation,
+// reading as a full alignment guide rather than a small mark at the cursor
+// (Kresna's own correction: "a solid crosshair expanding beyond the canvas
+// with the width of the duct", replacing an earlier round's small
+// width-length tick-mark crosshair). `angleRad` rotates the "across" band to
+// sit perpendicular to the run's own direction (the one that actually needs
+// to line up with the two parallel duct walls elsewhere on the page);
+// axis-aligned (0 rad) when the direction isn't known. Returns each band as
+// a center + angle + length + thickness, for the caller to fill as a rotated
+// rectangle (`ctx.translate`/`ctx.rotate`/`ctx.fillRect`) rather than a list
+// of points — a rotated filled rectangle isn't expressible as a flat point
+// list the way the two short segments this replaces were.
+function crosshairBands(center, thicknessPx, angleRad, spanPx) {
   const angle = Number.isFinite(angleRad) ? angleRad : 0;
-  const perp = angle + Math.PI / 2;
-  const ux = Math.cos(angle);
-  const uy = Math.sin(angle);
-  const vx = Math.cos(perp);
-  const vy = Math.sin(perp);
+  const band = { cx: center.x, cy: center.y, length: spanPx, thickness: thicknessPx };
   return {
-    half,
-    along: {
-      a: { x: center.x - ux * half, y: center.y - uy * half },
-      b: { x: center.x + ux * half, y: center.y + uy * half },
-    },
-    across: {
-      a: { x: center.x - vx * half, y: center.y - vy * half },
-      b: { x: center.x + vx * half, y: center.y + vy * half },
-    },
+    thickness: thicknessPx,
+    along: { ...band, angle },
+    across: { ...band, angle: angle + Math.PI / 2 },
   };
 }
 
-return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, legAngleClient, crosshairSegments};
+return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, legAngleClient, crosshairBands};
 })();
 
 // ===== src/console/shell.js =====
@@ -313,7 +309,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
     spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx,
-    legAngleClient, crosshairSegments,
+    legAngleClient, crosshairBands,
   } = __m_geom;
   const { isElbowStyleLabel, isStraightLabel, reduceArmState } = __m_arm_state;
 
@@ -454,7 +450,12 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
       y: (cursorClient.y - stageRect.top) * dpr,
     };
     const widthCanvasPx = widthCssPx * dpr;
-    const segs = crosshairSegments(centerCanvas, widthCanvasPx, angle);
+    // Long enough that a band centered anywhere on the canvas, at ANY
+    // rotation, still runs off every edge — twice the canvas's own diagonal
+    // is generous headroom over the minimum (one diagonal) that guarantees
+    // this from a corner.
+    const spanPx = 2 * Math.hypot(width, height);
+    const bands = crosshairBands(centerCanvas, widthCanvasPx, angle, spanPx);
 
     RW._crosshairLastState = {
       kind: armState.kind, widthIn: widthIn, widthCssPx: widthCssPx,
@@ -463,18 +464,25 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
 
     const ctx = overlayCtx;
     ctx.save();
-    ctx.lineWidth = Math.max(1.5, 1.25 * dpr);
-    // Cyan, distinct from native's own orange/teal cursor crosshair
-    // (#F36C3D drawing, #1597A7 selecting) so the two are never confused.
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.95)';
-    ctx.shadowColor = 'rgba(255,255,255,0.9)';
-    ctx.shadowBlur = 2 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(segs.along.a.x, segs.along.a.y);
-    ctx.lineTo(segs.along.b.x, segs.along.b.y);
-    ctx.moveTo(segs.across.a.x, segs.across.a.y);
-    ctx.lineTo(segs.across.b.x, segs.across.b.y);
-    ctx.stroke();
+    // Solid (fully opaque) fill, distinct from native's own orange/teal
+    // cursor crosshair (#F36C3D drawing, #1597A7 selecting) so the two are
+    // never confused — a thin outline keeps the band's edges legible over
+    // both light and dark drawing backgrounds, matching native's own
+    // white-halo convention on its text labels.
+    ctx.fillStyle = 'rgb(6, 182, 212)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = Math.max(1, dpr);
+    function drawBand(band) {
+      ctx.save();
+      ctx.translate(band.cx, band.cy);
+      ctx.rotate(band.angle);
+      const half = band.thickness / 2;
+      ctx.fillRect(-band.length / 2, -half, band.length, band.thickness);
+      ctx.strokeRect(-band.length / 2, -half, band.length, band.thickness);
+      ctx.restore();
+    }
+    drawBand(bands.along);
+    drawBand(bands.across);
     ctx.restore();
   }
 

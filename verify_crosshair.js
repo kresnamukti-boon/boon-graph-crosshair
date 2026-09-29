@@ -128,6 +128,7 @@ function makeCanvasContext() {
   return {
     clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
     save() {}, restore() {}, arc() {}, fill() {}, fillRect() {}, strokeRect() {},
+    translate() {}, rotate() {},
     setLineDash() {}, measureText() { return { width: 0 }; }, strokeText() {}, fillText() {},
   };
 }

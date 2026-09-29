@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   spatialToFramePx, framePxToClientPoint, spatialToClientPoint,
   cssPxPerFootAt, ductWidthInches, ductWidthCssPx, legAngleClient,
-  crosshairSegments,
+  crosshairBands,
 } from '../src/core/geom.js';
 import {
   isElbowStyleLabel, isStraightLabel, reduceArmState,
@@ -134,40 +134,37 @@ test('legAngleClient returns null for a degenerate (zero-length) segment', () =>
   assert.equal(legAngleClient(vertices, null, TRANSFORM, FRAME_SIZE, FRAME_RECT, PIXEL_RATIO), null);
 });
 
-test('crosshairSegments: axis-aligned (angle 0) puts "along" on the x-axis and "across" on the y-axis', () => {
-  const segs = crosshairSegments({ x: 100, y: 100 }, 20, 0);
-  assert.equal(segs.half, 10);
-  assert.ok(Math.abs(segs.along.a.y - 100) < 1e-9 && Math.abs(segs.along.b.y - 100) < 1e-9);
-  assert.ok(Math.abs(segs.across.a.x - 100) < 1e-9 && Math.abs(segs.across.b.x - 100) < 1e-9);
-  assert.equal(segs.along.a.x, 90);
-  assert.equal(segs.along.b.x, 110);
-  assert.equal(segs.across.a.y, 90);
-  assert.equal(segs.across.b.y, 110);
-});
-
-test('crosshairSegments: both arms span exactly widthPx end to end, at any angle', () => {
-  const width = 33;
-  for (const angle of [0, 0.4, Math.PI / 2, 2.1, -1.1]) {
-    const segs = crosshairSegments({ x: 5, y: -7 }, width, angle);
-    const alongLen = Math.hypot(segs.along.b.x - segs.along.a.x, segs.along.b.y - segs.along.a.y);
-    const acrossLen = Math.hypot(segs.across.b.x - segs.across.a.x, segs.across.b.y - segs.across.a.y);
-    assert.ok(Math.abs(alongLen - width) < 1e-9, `along length at angle ${angle}`);
-    assert.ok(Math.abs(acrossLen - width) < 1e-9, `across length at angle ${angle}`);
+test('crosshairBands: both bands are centered on the given point, at the given thickness and span length', () => {
+  const bands = crosshairBands({ x: 100, y: 100 }, 20, 0, 5000);
+  assert.equal(bands.thickness, 20);
+  for (const band of [bands.along, bands.across]) {
+    assert.equal(band.cx, 100);
+    assert.equal(band.cy, 100);
+    assert.equal(band.thickness, 20);
+    assert.equal(band.length, 5000);
   }
 });
 
-test('crosshairSegments: "across" is perpendicular to "along"', () => {
-  const segs = crosshairSegments({ x: 0, y: 0 }, 10, 0.73);
-  const alongVec = { x: segs.along.b.x - segs.along.a.x, y: segs.along.b.y - segs.along.a.y };
-  const acrossVec = { x: segs.across.b.x - segs.across.a.x, y: segs.across.b.y - segs.across.a.y };
-  const dot = alongVec.x * acrossVec.x + alongVec.y * acrossVec.y;
-  assert.ok(Math.abs(dot) < 1e-9);
+test('crosshairBands: "across" is perpendicular to "along" (90 degrees apart) at any angle', () => {
+  for (const angle of [0, 0.4, Math.PI / 2, 2.1, -1.1]) {
+    const bands = crosshairBands({ x: 5, y: -7 }, 33, angle, 1000);
+    const diff = bands.across.angle - bands.along.angle;
+    // Normalize to [0, 2*PI) before comparing to PI/2, since angle addition
+    // isn't itself wrapped.
+    const normalized = ((diff % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    assert.ok(Math.abs(normalized - Math.PI / 2) < 1e-9, `expected 90deg apart at angle ${angle}, got ${normalized}`);
+  }
 });
 
-test('crosshairSegments: undefined/NaN angle falls back to axis-aligned', () => {
-  const segs = crosshairSegments({ x: 0, y: 0 }, 10, undefined);
-  assert.ok(Math.abs(segs.along.a.y) < 1e-9);
-  assert.ok(Math.abs(segs.across.a.x) < 1e-9);
+test('crosshairBands: undefined/NaN angle falls back to axis-aligned (along = 0 rad)', () => {
+  const bands = crosshairBands({ x: 0, y: 0 }, 10, undefined, 1000);
+  assert.equal(bands.along.angle, 0);
+  assert.ok(Math.abs(bands.across.angle - Math.PI / 2) < 1e-9);
+});
+
+test('crosshairBands: a real angle is preserved verbatim on "along", not silently defaulted', () => {
+  const bands = crosshairBands({ x: 0, y: 0 }, 10, 0.73, 1000);
+  assert.equal(bands.along.angle, 0.73);
 });
 
 // ---------- arm-state ----------

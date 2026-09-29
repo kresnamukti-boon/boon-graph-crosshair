@@ -4,11 +4,13 @@ A console-injected (paste-into-DevTools) add-on for the Constructions Tagger **g
 ("Duct Takeoff") duct editor, sibling to `boon-command-line` / `boon-duct-workbench` /
 `boon-assembly-duplicate` / etc under `~/Projects/boon-projects/`.
 
-While an elbow style ("Elbow rectangular" / "Elbow round") is **armed** for the route/flex
-tool's next click, it draws a crosshair at the cursor whose arms span the armed duct's own real
-plan width (rectangular `width_in`, or `diameter_in` for round) in on-screen pixels — instead of
-eyeballing the corner against the two duct edges already drawn on the PDF, you can line each arm's
-ends up directly on them.
+While an elbow style ("Elbow rectangular" / "Elbow round") is **armed** for the route/flex tool's
+next click, it draws a solid, opaque crosshair at the cursor — two long bands crossing at the
+cursor, each running well past every edge of the visible canvas (not just a short mark at the
+cursor), each exactly as thick as the armed duct's own real plan width (rectangular `width_in`, or
+`diameter_in` for round) in on-screen pixels. Instead of eyeballing the corner against the two duct
+edges already drawn on the PDF, you can line the band up against them anywhere along its length —
+including well away from the cursor, e.g. against another duct run elsewhere on the sheet.
 
 Fully standalone — no coupling to any sibling RW-family add-on, works with or without them pasted
 on the same page, **in either paste order** (confirmed live pasted alongside `boon-command-line`:
@@ -62,11 +64,6 @@ Rebuild after editing `src/`: `bash build_loader.sh`. Verify: `node --test test/
   `window.__graphDebug`).
 - No teardown/uninstall function — reload the page to remove it, same as every sibling add-on in
   this family.
-- **Not yet confirmed live: the shell's own per-frame draw loop actually painting in a real,
-  focused browser session.** `requestAnimationFrame` doesn't reliably fire against a remote
-  browser-bridge tab lacking real OS focus (a known limitation for this whole family, see
-  `boon-assembly-duplicate/CLAUDE.md`) — this round's live test confirmed the arming/detection and
-  the sizing/positioning math directly (by replicating the same formulas against the real page and
-  screenshotting the result: the crosshair centered exactly on the drawn corner, sized to the
-  duct's real on-screen width), but couldn't observe the shipped loop itself run in that
-  environment. Confirm once pasted in a genuinely-focused real session.
+- **Confirmed live in a real, focused session** (not just the automated bridge session used
+  earlier): Kresna pasted this on the real page and confirmed seeing the crosshair while an elbow
+  style was armed.

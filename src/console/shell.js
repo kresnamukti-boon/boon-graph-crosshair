@@ -30,7 +30,7 @@
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
     spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx,
-    legAngleClient, crosshairSegments,
+    legAngleClient, crosshairBands,
   } = __m_geom;
   const { isElbowStyleLabel, isStraightLabel, reduceArmState } = __m_arm_state;
 
@@ -171,7 +171,12 @@
       y: (cursorClient.y - stageRect.top) * dpr,
     };
     const widthCanvasPx = widthCssPx * dpr;
-    const segs = crosshairSegments(centerCanvas, widthCanvasPx, angle);
+    // Long enough that a band centered anywhere on the canvas, at ANY
+    // rotation, still runs off every edge — twice the canvas's own diagonal
+    // is generous headroom over the minimum (one diagonal) that guarantees
+    // this from a corner.
+    const spanPx = 2 * Math.hypot(width, height);
+    const bands = crosshairBands(centerCanvas, widthCanvasPx, angle, spanPx);
 
     RW._crosshairLastState = {
       kind: armState.kind, widthIn: widthIn, widthCssPx: widthCssPx,
@@ -180,18 +185,25 @@
 
     const ctx = overlayCtx;
     ctx.save();
-    ctx.lineWidth = Math.max(1.5, 1.25 * dpr);
-    // Cyan, distinct from native's own orange/teal cursor crosshair
-    // (#F36C3D drawing, #1597A7 selecting) so the two are never confused.
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.95)';
-    ctx.shadowColor = 'rgba(255,255,255,0.9)';
-    ctx.shadowBlur = 2 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(segs.along.a.x, segs.along.a.y);
-    ctx.lineTo(segs.along.b.x, segs.along.b.y);
-    ctx.moveTo(segs.across.a.x, segs.across.a.y);
-    ctx.lineTo(segs.across.b.x, segs.across.b.y);
-    ctx.stroke();
+    // Solid (fully opaque) fill, distinct from native's own orange/teal
+    // cursor crosshair (#F36C3D drawing, #1597A7 selecting) so the two are
+    // never confused — a thin outline keeps the band's edges legible over
+    // both light and dark drawing backgrounds, matching native's own
+    // white-halo convention on its text labels.
+    ctx.fillStyle = 'rgb(6, 182, 212)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = Math.max(1, dpr);
+    function drawBand(band) {
+      ctx.save();
+      ctx.translate(band.cx, band.cy);
+      ctx.rotate(band.angle);
+      const half = band.thickness / 2;
+      ctx.fillRect(-band.length / 2, -half, band.length, band.thickness);
+      ctx.strokeRect(-band.length / 2, -half, band.length, band.thickness);
+      ctx.restore();
+    }
+    drawBand(bands.along);
+    drawBand(bands.across);
     ctx.restore();
   }
 
