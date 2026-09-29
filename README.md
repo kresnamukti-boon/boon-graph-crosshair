@@ -51,10 +51,19 @@ Rebuild after editing `src/`: `bash build_loader.sh`. Verify: `node --test test/
   add-on infers "armed" from watching the same numbered click-menu (and its digit-key shortcut)
   you use to pick "Elbow rectangular"/"Elbow round" yourself. See `src/core/arm-state.js`'s own
   header for exactly which native flows this mirrors and where it could, in principle, drift from
-  native's real internal state on an edge case the tests here don't cover.
+  native's real internal state on an edge case the tests here don't cover. Live-tested against a
+  real page: the click-menu text and this arming both matched exactly as designed (see CLAUDE.md).
 - **A page-region's own local scale isn't visible from outside.** Most pages have none; a duct
   drawn inside a scaled sub-region will size the crosshair off the page-wide scale instead of the
   region's own (native itself would use the region's scale here — not reachable from
   `window.__graphDebug`).
 - No teardown/uninstall function — reload the page to remove it, same as every sibling add-on in
   this family.
+- **Not yet confirmed live: the shell's own per-frame draw loop actually painting in a real,
+  focused browser session.** `requestAnimationFrame` doesn't reliably fire against a remote
+  browser-bridge tab lacking real OS focus (a known limitation for this whole family, see
+  `boon-assembly-duplicate/CLAUDE.md`) — this round's live test confirmed the arming/detection and
+  the sizing/positioning math directly (by replicating the same formulas against the real page and
+  screenshotting the result: the crosshair centered exactly on the drawn corner, sized to the
+  duct's real on-screen width), but couldn't observe the shipped loop itself run in that
+  environment. Confirm once pasted in a genuinely-focused real session.
