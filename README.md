@@ -11,8 +11,11 @@ eyeballing the corner against the two duct edges already drawn on the PDF, you c
 ends up directly on them.
 
 Fully standalone — no coupling to any sibling RW-family add-on, works with or without them pasted
-on the same page. Read-only: never clicks, drags, or mutates any annotation state — only observes
-the click-menu you already use to pick an elbow style, and reads `window.__graphDebug`'s existing
+on the same page, **in either paste order** (confirmed live pasted alongside `boon-command-line`:
+shared `window.__RW` namespace, no field collisions, and the click-menu pick still reaches this
+add-on by click or digit key either way — see CLAUDE.md for why). Read-only: never clicks, drags,
+or mutates any annotation state — only observes the click-menu you already use to pick an elbow
+style, and reads `window.__graphDebug`'s existing
 read-only getters.
 
 ## Injection
