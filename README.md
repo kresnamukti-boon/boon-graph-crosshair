@@ -4,21 +4,20 @@ A console-injected (paste-into-DevTools) add-on for the Constructions Tagger **g
 ("Duct Takeoff") duct editor, sibling to `boon-command-line` / `boon-duct-workbench` /
 `boon-assembly-duplicate` / etc under `~/Projects/boon-projects/`.
 
-While an elbow style ("Elbow rectangular" / "Elbow round") is **armed** for the route/flex tool's
-next click, it draws a solid, opaque crosshair at the cursor — two long bands crossing at the
-cursor, each running well past every edge of the visible canvas (not just a short mark at the
-cursor), each exactly as thick as the armed duct's own real plan width (rectangular `width_in`, or
-`diameter_in` for round) in on-screen pixels. Instead of eyeballing the corner against the two duct
-edges already drawn on the PDF, you can line the band up against them anywhere along its length —
-including well away from the cursor, e.g. against another duct run elsewhere on the sheet.
+Whenever a duct-drawing tool is active (route, flex, extend, transition, or branch), it draws a
+translucent crosshair at the cursor — two long bands crossing there, each running well past every
+edge of the visible canvas (not just a short mark at the cursor), each exactly as thick as the
+current duct's own real plan width (rectangular `width_in`, or `diameter_in` for round) in
+on-screen pixels, at 20% opacity so the PDF underneath stays visible. Instead of eyeballing a
+corner against the two duct edges already drawn on the PDF, you can line the band up against them
+anywhere along its length — including well away from the cursor, e.g. against another duct run
+elsewhere on the sheet. The crosshair is always screen-axis-aligned — it never rotates to match
+the duct's own travel direction.
 
 Fully standalone — no coupling to any sibling RW-family add-on, works with or without them pasted
 on the same page, **in either paste order** (confirmed live pasted alongside `boon-command-line`:
-shared `window.__RW` namespace, no field collisions, and the click-menu pick still reaches this
-add-on by click or digit key either way — see CLAUDE.md for why). Read-only: never clicks, drags,
-or mutates any annotation state — only observes the click-menu you already use to pick an elbow
-style, and reads `window.__graphDebug`'s existing
-read-only getters.
+shared `window.__RW` namespace, no field collisions). Read-only: never clicks, drags, or mutates
+any annotation state — only reads `window.__graphDebug`'s existing read-only getters.
 
 ## Injection
 
@@ -28,19 +27,17 @@ real reload or a fresh paste either way).
 
 ## Console-facing surface
 
-- `RW._crosshairEnabled = false` — killswitch: stops drawing (and stops observing click-menu
-  picks) without needing a page reload. Set back to `true` (the default) to resume.
-- `RW._crosshairState()` — the last drawn crosshair's own inputs: `{kind, widthIn, widthCssPx,
-  cursorClient, angle}`, or `null` if nothing is currently drawn.
-- `RW._crosshairArmState()` — the raw arm-state (`{kind: 'pending'|'continuation', ...}` or
-  `null`), for debugging without waiting for the next draw.
+- `RW._crosshairEnabled = false` — killswitch: stops drawing without needing a page reload. Set
+  back to `true` (the default) to resume.
+- `RW._crosshairState()` — the last drawn crosshair's own inputs: `{activeTool, widthIn,
+  widthCssPx, cursorClient}`, or `null` if nothing is currently drawn (kept in sync every tick —
+  never a stale snapshot from an earlier tool/draw).
 
 ## Files & load order
 
 ```
-src/core/geom.js        pure world<->screen math + duct-width sizing (unit tested, node --test)
-src/core/arm-state.js    pure reducer: click-menu picks -> armed/disarmed (unit tested)
-src/console/shell.js     impure: DOM listeners, overlay canvas, per-frame draw loop
+src/core/geom.js        pure world<->screen math + duct-width sizing + crosshair geometry (unit tested, node --test)
+src/console/shell.js     impure: overlay canvas, per-frame draw loop
 scripts/build-dist.js    bundles src/core/*.js + shell.js into dist/rw_crosshair.js
 build_loader.sh          wraps dist/rw_crosshair.js into console_loader.js (ready-gated, node --checked)
 ```
@@ -51,19 +48,11 @@ Rebuild after editing `src/`: `bash build_loader.sh`. Verify: `node --test test/
 ## Boundaries
 
 - **Graph host only.** Does nothing on the annotate-job host (no `window.__graphDebug` there).
-- **The armed-style detector is inherently a best-effort shadow, not a direct state read.**
-  `window.__graphDebug.route` does not expose `pendingElbowStyle`/`continuationElbowStyle` — this
-  add-on infers "armed" from watching the same numbered click-menu (and its digit-key shortcut)
-  you use to pick "Elbow rectangular"/"Elbow round" yourself. See `src/core/arm-state.js`'s own
-  header for exactly which native flows this mirrors and where it could, in principle, drift from
-  native's real internal state on an edge case the tests here don't cover. Live-tested against a
-  real page: the click-menu text and this arming both matched exactly as designed (see CLAUDE.md).
 - **A page-region's own local scale isn't visible from outside.** Most pages have none; a duct
   drawn inside a scaled sub-region will size the crosshair off the page-wide scale instead of the
   region's own (native itself would use the region's scale here — not reachable from
   `window.__graphDebug`).
 - No teardown/uninstall function — reload the page to remove it, same as every sibling add-on in
   this family.
-- **Confirmed live in a real, focused session** (not just the automated bridge session used
-  earlier): Kresna pasted this on the real page and confirmed seeing the crosshair while an elbow
-  style was armed.
+- **Confirmed live in a real, focused session.** Kresna pasted this on the real page and confirmed
+  seeing the crosshair render.

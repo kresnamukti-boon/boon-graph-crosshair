@@ -1,115 +1,12 @@
-// ===== src/core/arm-state.js =====
-const __m_arm_state = (function(){
-// Pure reducer: tracks whether an elbow style is currently ARMED for the
-// bend that will form on the route/flex tool's NEXT click, from nothing but
-// (a) the checkpoint/continuation click-menu picks the shell observes, and
-// (b) a periodic snapshot of window.__graphDebug.route/activeTool.
-//
-// Why a menu-click observer at all, not a direct state read: confirmed via
-// exploration of the local app source copy (construction-tagger-webv2/
-// project_graph/js/graph-session-entry.js's own window.__graphDebug.route
-// getter, :32336-32355) that route.pendingElbowStyle/continuationElbowStyle/
-// elbowStyleOverrides are NOT exposed to a pasted console script — they live
-// only in native's own module-private store. The only externally-visible
-// trace of "an elbow style was just armed" is the click-menu item the user
-// picked (or its numbered-digit-key equivalent) to arm it. This reducer
-// mirrors native's own two arming paths (duct-routing-controller.js's
-// armPendingElbowStyle/route.continuationElbowStyle; see that file's own
-// comments) closely enough for the crosshair's purpose, but is inherently a
-// best-effort shadow of state this add-on cannot read directly — verify live
-// before trusting an edge case not covered by the tests here (see CLAUDE.md's
-// "not live-verified yet" section).
-//
-// route shape (subset of __graphDebug.route this module reads):
-//   { status: 'capturing'|..., mode: 'route'|'flex'|..., vertices: [{x,y,z?}, ...] }
-
-const ELBOW_LABEL_RE = /^\d+\.\s*Elbow (rectangular|round)\b/;
-const STRAIGHT_LABEL_RE = /^\d+\.\s*Continue \(straight/;
-
-function isElbowStyleLabel(label) {
-  return ELBOW_LABEL_RE.test(String(label ?? '').trim());
-}
-
-function isStraightLabel(label) {
-  return STRAIGHT_LABEL_RE.test(String(label ?? '').trim());
-}
-
-// state is either null (disarmed) or:
-//   { kind: 'pending'|'continuation', armedVertexCount: number, armedTool: string }
-// 'pending' — a mid-route checkpoint pick (armPendingElbowStyle): one-shot,
-//   consumed by the very next appendRouteVertex, so it disarms the instant
-//   route.vertices.length changes from armedVertexCount.
-// 'continuation' — an open-end "Elbow rectangular/round" pick
-//   (armRouteContinuation): standing for the whole run, so it only disarms
-//   when the route stops capturing or leaves route/flex mode entirely.
-function initialArmState() {
-  return null;
-}
-
-function reduceArmState(state, event) {
-  switch (event.type) {
-    case 'menuPick': {
-      const { label, route, activeTool } = event;
-      const text = String(label ?? '').trim();
-      if (isElbowStyleLabel(text)) {
-        if (!route || !['route', 'flex'].includes(route.mode)) return state;
-        // Picked mid-draw (status already "capturing" from the PREVIOUS
-        // click) -> the one-shot pending path. Picked from the open-end
-        // menu (route not yet capturing — armRouteContinuation hasn't run
-        // yet at the moment of the click handler) -> the standing
-        // continuation path.
-        const kind = route.status === 'capturing' ? 'pending' : 'continuation';
-        return {
-          kind,
-          armedVertexCount: route.vertices?.length ?? 0,
-          armedTool: activeTool ?? route.mode,
-        };
-      }
-      // "Continue (straight)" explicitly clears any pending style
-      // (setStraightLocked's own pendingElbowStyle:null, duct-routing-
-      // controller.js) and makes a standing continuation moot (every
-      // subsequent leg is forced straight until unlocked) — disarm either way.
-      if (isStraightLabel(text)) return null;
-      // Any OTHER checkpoint item ("Continue as flex", "Reducer /
-      // transition", "Unlock (allow turns)") concludes THIS checkpoint
-      // without arming a style — a standing 'continuation' survives it
-      // (it isn't checkpoint-specific), but a one-shot 'pending' does not.
-      return state && state.kind === 'pending' ? null : state;
-    }
-    case 'routeUpdate': {
-      if (!state) return null;
-      const { route, activeTool } = event;
-      if (!route || route.status !== 'capturing' || !['route', 'flex'].includes(route.mode)) {
-        return null;
-      }
-      if (activeTool && !['route', 'flex'].includes(activeTool)) return null;
-      if (state.kind === 'pending' && (route.vertices?.length ?? 0) !== state.armedVertexCount) {
-        return null;
-      }
-      return state;
-    }
-    case 'escape':
-    case 'toolChanged':
-    case 'pageChanged':
-      return null;
-    default:
-      return state;
-  }
-}
-
-return {isElbowStyleLabel, isStraightLabel, initialArmState, reduceArmState};
-})();
-
 // ===== src/core/geom.js =====
 const __m_geom = (function(){
 // Pure, DOM-free geometry: replicates just enough of native's own world<->screen
 // math (graph-session-entry.js's spatialToFramePx/framePxToClientPoint/
 // framePxPerFootAt, confirmed live/read against the local source copy under
-// construction-tagger-webv2/project_graph/js/) to size and orient a crosshair
-// at the cursor to the ARMED duct's real plan width, in CSS pixels — without
-// ever reaching into native's own module-private state (there is none to
-// reach into from a pasted console script; see src/console/shell.js's own
-// header).
+// construction-tagger-webv2/project_graph/js/) to size a crosshair at the
+// cursor to the duct's real plan width, in CSS pixels — without ever reaching
+// into native's own module-private state (there is none to reach into from a
+// pasted console script; see src/console/shell.js's own header).
 //
 // One real gap vs. native, left deliberate rather than silently "fixed":
 // native's own framePxPerFootAt samples a PageRegion's own spatial frame when
@@ -195,75 +92,56 @@ function ductWidthCssPx(widthInches, cssPxPerFoot) {
   return Number.isFinite(px) && px > 0 ? px : null;
 }
 
-// Screen-space angle (radians, atan2 convention) of the leg the armed elbow
-// bends off of — the last placed segment (vertices[len-2] -> vertices[len-1]),
-// or the source connector's own direction when only a seed vertex exists yet
-// (a fresh continuation). Converted through the SAME world->client mapping as
-// the crosshair's own center, so a rotated/flipped page transform still lines
-// the crosshair up with the real drawn duct edges, not with raw world axes.
-// Returns null when no direction is known yet — callers fall back to an
-// axis-aligned (unrotated) crosshair rather than guessing.
-function legAngleClient(vertices, startDirection, transform, frameSize, frameRect, pixelRatio) {
-  let a = null;
-  let b = null;
-  if (Array.isArray(vertices) && vertices.length >= 2) {
-    a = vertices[vertices.length - 2];
-    b = vertices[vertices.length - 1];
-  } else if (Array.isArray(vertices) && vertices.length === 1 && startDirection
-    && (startDirection.x !== 0 || startDirection.y !== 0)) {
-    a = vertices[0];
-    b = { x: a.x + startDirection.x, y: a.y + startDirection.y, z: a.z ?? 0 };
-  } else {
-    return null;
-  }
-  const pa = spatialToClientPoint(a, transform, frameSize, frameRect, pixelRatio);
-  const pb = spatialToClientPoint(b, transform, frameSize, frameRect, pixelRatio);
-  if (!pa || !pb) return null;
-  const dx = pb.x - pa.x;
-  const dy = pb.y - pa.y;
-  if (dx === 0 && dy === 0) return null;
-  return Math.atan2(dy, dx);
-}
-
 // The crosshair itself: two perpendicular BANDS (thick lines, not hairlines)
 // crossing at `center` (whatever pixel space the caller is drawing in — CSS
 // or canvas-backing — as long as thicknessPx/spanPx are in the same space).
 // Each band is `thicknessPx` thick (the duct's own true on-screen width) and
 // `spanPx` long, centered on `center` — `spanPx` is the CALLER's job to make
 // large enough (e.g. the overlay canvas's own diagonal, doubled) that both
-// bands visibly run off every edge of the canvas regardless of rotation,
-// reading as a full alignment guide rather than a small mark at the cursor
-// (Kresna's own correction: "a solid crosshair expanding beyond the canvas
-// with the width of the duct", replacing an earlier round's small
-// width-length tick-mark crosshair). `angleRad` rotates the "across" band to
-// sit perpendicular to the run's own direction (the one that actually needs
-// to line up with the two parallel duct walls elsewhere on the page);
-// axis-aligned (0 rad) when the direction isn't known. Returns each band as
-// a center + angle + length + thickness, for the caller to fill as a rotated
-// rectangle (`ctx.translate`/`ctx.rotate`/`ctx.fillRect`) rather than a list
-// of points — a rotated filled rectangle isn't expressible as a flat point
-// list the way the two short segments this replaces were.
-function crosshairBands(center, thicknessPx, angleRad, spanPx) {
-  const angle = Number.isFinite(angleRad) ? angleRad : 0;
-  const band = { cx: center.x, cy: center.y, length: spanPx, thickness: thicknessPx };
+// bands visibly run off every edge of the canvas, reading as a full
+// alignment guide rather than a small mark at the cursor (Kresna's own
+// correction: "a solid crosshair expanding beyond the canvas with the width
+// of the duct", replacing an earlier round's small width-length tick-mark
+// crosshair).
+//
+// Deliberately ALWAYS screen-axis-aligned, with no angle input at all
+// (Kresna's own explicit follow-up correction: "make sure it doesnt rotate
+// relative to the duct", removing an even earlier round's attempt to rotate
+// the crosshair to the duct's own travel direction). Not just "the caller
+// happens to not pass an angle" — there is no angle parameter to this
+// function any more, so a future caller can't accidentally reintroduce
+// rotation by passing one. Returns each band as a ready-to-fill rectangle
+// (`{x, y, width, height}`, top-left + size — exactly `ctx.fillRect`'s own
+// argument order) rather than a center+angle descriptor, since axis-aligned
+// rectangles need no `ctx.translate`/`ctx.rotate` at all.
+function crosshairBands(center, thicknessPx, spanPx) {
+  const halfThickness = thicknessPx / 2;
+  const halfSpan = spanPx / 2;
   return {
     thickness: thicknessPx,
-    along: { ...band, angle },
-    across: { ...band, angle: angle + Math.PI / 2 },
+    horizontal: {
+      x: center.x - halfSpan, y: center.y - halfThickness,
+      width: spanPx, height: thicknessPx,
+    },
+    vertical: {
+      x: center.x - halfThickness, y: center.y - halfSpan,
+      width: thicknessPx, height: spanPx,
+    },
   };
 }
 
-return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, legAngleClient, crosshairBands};
+return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands};
 })();
 
 // ===== src/console/shell.js =====
-// Boon Crosshair — console shell (impure, never ported). While an elbow
-// style is armed for the route/flex tool's NEXT click (see src/core/
-// arm-state.js's own header for exactly what "armed" means and why it has to
-// be inferred from click-menu picks rather than read directly), draws a
-// crosshair at the snapped cursor position whose arms span the armed duct's
-// own real plan width in CSS pixels — so the two arm-ends can be sat
-// directly on the duct's two already-drawn edge lines when placing a corner.
+// Boon Crosshair — console shell (impure, never ported). Whenever a
+// duct-drawing tool is active (route/flex/extend/transition/branch — the
+// exact same trigger native's own size-following guide circle uses, see
+// "always active" below), draws a translucent, screen-axis-aligned crosshair
+// at the snapped cursor position whose bands are as thick as the current
+// duct's real plan width in CSS pixels — so the bands can be lined up
+// against the duct's already-drawn edges anywhere on the sheet, not just
+// right at the cursor.
 //
 // Read-only and non-invasive: never touches store/commandJournal, never
 // synthesizes a click or drag, draws on its OWN overlay canvas (never
@@ -288,14 +166,20 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   // mechanism) — shell.js is appended verbatim, so it must pull these out
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
-    spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx,
-    legAngleClient, crosshairBands,
+    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands,
   } = __m_geom;
-  const { isElbowStyleLabel, isStraightLabel, reduceArmState } = __m_arm_state;
 
   function status(msg) {
     if (RW._commitStatus) RW._commitStatus(msg); else console.log('[RW crosshair] ' + msg);
   }
+
+  // "Always active when drawing duct": the same activeTool set native's own
+  // size-following guide circle gates on (drawCursorOverlayImmediate's own
+  // `drawingTools` array, graph-session-entry.js) — route/flex/extend/
+  // transition/branch. Not gated on route.status at all (matching native's
+  // own condition exactly), so the crosshair is already visible before the
+  // very first click of a run, not just mid-draw.
+  const DRAWING_TOOLS = ['route', 'flex', 'extend', 'transition', 'branch'];
 
   // ----- overlay layer -----
   // Its own canvas, appended to #graph-canvas-stage (the same ancestor
@@ -323,69 +207,18 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     overlayCtx = overlayCanvas.getContext('2d');
     return overlayCanvas;
   }
+  // Every bail path (nothing to draw right now, for whatever reason) routes
+  // through here — also resets RW._crosshairLastState to null, so the
+  // console debug hatch can never report a stale "last drawn" snapshot from
+  // several ticks ago while nothing is actually on screen (the same class of
+  // staleness bug native's own route.vertices/mode/context caused for ITS
+  // cursor overlay, per graph-session-entry.js's own comment on that fix).
   function clearOverlay() {
     if (overlayCtx && overlayCanvas) overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    RW._crosshairLastState = null;
   }
-
-  // ----- arm-state wiring -----
-  // route/activeTool snapshots are read straight off window.__graphDebug —
-  // see arm-state.js's own header for why this shell can't read
-  // pendingElbowStyle/continuationElbowStyle directly and has to watch the
-  // click-menu instead.
-  let armState = null;
-
-  function readRoute() {
-    const gd = window.__graphDebug;
-    if (!gd) return null;
-    try { return gd.route; } catch (e) { return null; }
-  }
-
-  function dispatchMenuPick(labelText) {
-    const gd = window.__graphDebug;
-    const route = readRoute();
-    const activeTool = gd ? gd.activeTool : null;
-    armState = reduceArmState(armState, { type: 'menuPick', label: labelText, route, activeTool });
-  }
-
-  function isClickMenuButton(el) {
-    return !!(el && el.tagName === 'BUTTON' && el.closest && el.closest('#graph-click-menu'));
-  }
-
-  // Capture phase on window: sees a real click on a numbered click-menu item
-  // before the menu's own handler can remove it from the DOM (showClickMenu's
-  // runItem, graph-session-entry.js), and runs regardless of whichever
-  // sibling add-on's own listeners are also registered on this page.
-  window.addEventListener('click', function (event) {
-    if (RW._crosshairEnabled === false) return;
-    if (!isClickMenuButton(event.target)) return;
-    dispatchMenuPick(event.target.textContent);
-  }, true);
-
-  // The click-menu also accepts a numbered digit keystroke in place of a
-  // click (native's own clickMenuKeydownHandler, graph-session-entry.js) —
-  // read the same button's text off the menu's own DOM before native's
-  // handler removes the menu, rather than trying to reproduce its own
-  // index math independently.
-  window.addEventListener('keydown', function (event) {
-    if (RW._crosshairEnabled === false) return;
-    if (event.key === 'Escape') {
-      armState = reduceArmState(armState, { type: 'escape' });
-      return;
-    }
-    const menu = document.getElementById('graph-click-menu');
-    if (!menu) return;
-    const index = Number(event.key) - 1;
-    if (!Number.isInteger(index) || index < 0) return;
-    const buttons = menu.querySelectorAll('button');
-    const button = buttons && buttons[index];
-    if (!button) return;
-    dispatchMenuPick(button.textContent);
-  }, true);
 
   // ----- per-frame update + draw -----
-  let lastPageId;
-  let lastActiveTool;
-
   function draw(gd, route) {
     const stage = document.getElementById('graph-canvas-stage');
     const frame = document.getElementById('graph-canvas-frame');
@@ -407,12 +240,6 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     const widthCssPx = ductWidthCssPx(widthIn, cssPxPerFoot);
     if (!widthCssPx) { clearOverlay(); return; }
 
-    const angle = legAngleClient(
-      route ? route.vertices : null,
-      route ? route.startDirection : null,
-      transform, frameSize, frameRect, pixelRatio,
-    );
-
     const canvas = ensureOverlay();
     if (!canvas) return;
     const stageRect = stage.getBoundingClientRect();
@@ -430,39 +257,28 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
       y: (cursorClient.y - stageRect.top) * dpr,
     };
     const widthCanvasPx = widthCssPx * dpr;
-    // Long enough that a band centered anywhere on the canvas, at ANY
-    // rotation, still runs off every edge — twice the canvas's own diagonal
-    // is generous headroom over the minimum (one diagonal) that guarantees
-    // this from a corner.
+    // Long enough that a band centered ANYWHERE on the canvas still runs off
+    // every edge — twice the canvas's own diagonal is generous headroom over
+    // the minimum (one diagonal) that guarantees this from a corner.
     const spanPx = 2 * Math.hypot(width, height);
-    const bands = crosshairBands(centerCanvas, widthCanvasPx, angle, spanPx);
+    const bands = crosshairBands(centerCanvas, widthCanvasPx, spanPx);
 
     RW._crosshairLastState = {
-      kind: armState.kind, widthIn: widthIn, widthCssPx: widthCssPx,
-      cursorClient: cursorClient, angle: angle,
+      activeTool: gd.activeTool, widthIn: widthIn, widthCssPx: widthCssPx,
+      cursorClient: cursorClient,
     };
 
     const ctx = overlayCtx;
     ctx.save();
-    // Solid (fully opaque) fill, distinct from native's own orange/teal
+    // 20% opacity (Kresna's own request) — reads as a light tint over the
+    // drawing rather than an opaque bar, so the PDF linework underneath
+    // stays visible through it. Distinct hue from native's own orange/teal
     // cursor crosshair (#F36C3D drawing, #1597A7 selecting) so the two are
-    // never confused — a thin outline keeps the band's edges legible over
-    // both light and dark drawing backgrounds, matching native's own
-    // white-halo convention on its text labels.
-    ctx.fillStyle = 'rgb(6, 182, 212)';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = Math.max(1, dpr);
-    function drawBand(band) {
-      ctx.save();
-      ctx.translate(band.cx, band.cy);
-      ctx.rotate(band.angle);
-      const half = band.thickness / 2;
-      ctx.fillRect(-band.length / 2, -half, band.length, band.thickness);
-      ctx.strokeRect(-band.length / 2, -half, band.length, band.thickness);
-      ctx.restore();
-    }
-    drawBand(bands.along);
-    drawBand(bands.across);
+    // never confused. Screen-axis-aligned rectangles (see crosshairBands's
+    // own header) — no rotation, no translate/rotate needed.
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+    ctx.fillRect(bands.horizontal.x, bands.horizontal.y, bands.horizontal.width, bands.horizontal.height);
+    ctx.fillRect(bands.vertical.x, bands.vertical.y, bands.vertical.width, bands.vertical.height);
     ctx.restore();
   }
 
@@ -472,35 +288,19 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     const gd = window.__graphDebug;
     if (!gd) { clearOverlay(); return; }
 
-    const currentPageId = gd.currentPageId;
-    if (currentPageId !== lastPageId) {
-      lastPageId = currentPageId;
-      armState = reduceArmState(armState, { type: 'pageChanged' });
-    }
-    const activeTool = gd.activeTool;
-    if (activeTool !== lastActiveTool) {
-      lastActiveTool = activeTool;
-      if (!['route', 'flex'].includes(activeTool)) {
-        armState = reduceArmState(armState, { type: 'toolChanged' });
-      }
-    }
+    if (!DRAWING_TOOLS.includes(gd.activeTool)) { clearOverlay(); return; }
 
-    const route = readRoute();
-    armState = reduceArmState(armState, { type: 'routeUpdate', route: route, activeTool: activeTool });
-
-    if (!armState) { clearOverlay(); return; }
+    let route = null;
+    try { route = gd.route; } catch (e) { route = null; }
     draw(gd, route);
   }
   RW._crosshairRaf = requestAnimationFrame(tick);
 
   // ----- console-facing hatches -----
-  // Killswitch: __RW._crosshairEnabled = false stops drawing (and stops
-  // observing menu picks) without needing a page reload.
+  // Killswitch: __RW._crosshairEnabled = false stops drawing without needing
+  // a page reload.
   if (RW._crosshairEnabled === undefined) RW._crosshairEnabled = true;
   RW._crosshairState = function () { return RW._crosshairLastState || null; };
-  RW._crosshairArmState = function () { return armState; };
-  RW._crosshairIsElbowLabel = isElbowStyleLabel;
-  RW._crosshairIsStraightLabel = isStraightLabel;
 
-  status('crosshair ready — draws a duct-width crosshair at the cursor while an elbow style is armed for the route/flex tool\'s next click');
+  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active');
 })()

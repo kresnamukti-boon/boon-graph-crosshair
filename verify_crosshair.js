@@ -1,10 +1,9 @@
 // Synthetic Node harness for dist/rw_crosshair.js — no browser, no network.
 // Loads the real shipped dist file off disk (never a reimplementation)
-// against a small hand-rolled DOM/canvas/rAF stub, and drives it through
-// real dispatched click/keydown events on a fake #graph-click-menu, exactly
-// as the pattern boon-duct-workbench/verify_branchmem.js and boon-assembly-
-// duplicate/verify_stamp.js established for this family. Refuses to run
-// against a stale dist/ (see the freshness guard below).
+// against a small hand-rolled DOM/canvas/rAF stub, in this family's
+// established hand-rolled-stub style (boon-duct-workbench/verify_branchmem.js,
+// boon-assembly-duplicate/verify_stamp.js). Refuses to run against a stale
+// dist/ (see the freshness guard below).
 'use strict';
 
 const fs = require('fs');
@@ -124,11 +123,23 @@ function makeElement(tag, byId) {
   return el;
 }
 
+// Records every translate/rotate/fillRect call it receives (`calls`), so a
+// test can assert both what got drawn AND — just as importantly here — what
+// did NOT: no translate/rotate call at all is the harness-level proof that
+// the shell never rotates the crosshair (Kresna's own "make sure it doesnt
+// rotate relative to the duct" correction), not just that the pure geom
+// function has no angle parameter to misuse.
 function makeCanvasContext() {
+  const calls = [];
   return {
-    clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
-    save() {}, restore() {}, arc() {}, fill() {}, fillRect() {}, strokeRect() {},
-    translate() {}, rotate() {},
+    _calls: calls,
+    clearRect() { calls.push({ op: 'clearRect' }); },
+    beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+    save() {}, restore() {}, arc() {}, fill() {},
+    fillRect(x, y, width, height) { calls.push({ op: 'fillRect', x, y, width, height }); },
+    strokeRect() {},
+    translate(x, y) { calls.push({ op: 'translate', x, y }); },
+    rotate(angle) { calls.push({ op: 'rotate', angle }); },
     setLineDash() {}, measureText() { return { width: 0 }; }, strokeText() {}, fillText() {},
   };
 }
@@ -280,29 +291,6 @@ function loadModule(win) {
   return fn(...Object.values(sandboxGlobals));
 }
 
-function makeClickMenu(byId, labels) {
-  const menu = makeElement('div', byId);
-  menu.id = 'graph-click-menu';
-  doc.body.appendChild(menu);
-  const buttons = labels.map((label, i) => {
-    const btn = makeElement('button', byId);
-    btn.textContent = (i + 1) + '. ' + label;
-    menu.appendChild(btn);
-    return btn;
-  });
-  return { menu, buttons };
-}
-
-function clickButton(win, btn) {
-  const evt = { type: 'click', target: btn, bubbles: true };
-  win.dispatchEvent(evt);
-}
-
-function pressKey(win, key) {
-  const evt = { type: 'keydown', key: key, bubbles: true };
-  win.dispatchEvent(evt);
-}
-
 /* ---------- tests ---------- */
 
 (function () {
@@ -337,119 +325,79 @@ function pressKey(win, key) {
     ok(win.__console._logs.length === 0, 'a second paste on the same page logs nothing at all (the install guard returns before any log call)');
   }
 
-  /* ---- 4. picking "Elbow round" mid-route arms a crosshair, drawn at the snapped cursor, sized to the duct width ---- */
+  /* ---- 4. always active the instant a duct-drawing tool is active (no arming needed), sized to the duct width ---- */
   {
     const { win, byId, raf } = makeStubWindow();
     makeGraphLayers(byId);
-    win.__graphDebug = makeGraphDebug();
+    win.__graphDebug = makeGraphDebug(); // activeTool: 'route' by default
     loadModule(win);
-    raf.runOneFrame(); // first tick establishes lastPageId/lastActiveTool baselines
+    raf.runOneFrame(); // draws on the very first tick — nothing to arm first
 
-    const { buttons } = makeClickMenu(byId, ['Continue (straight)', 'Elbow rectangular', 'Elbow round']);
-    clickButton(win, buttons[2]); // "3. Elbow round"
-
-    ok(win.__RW._crosshairArmState() !== null, 'arm-state is armed after picking an elbow style');
-    ok(win.__RW._crosshairArmState().kind === 'pending', 'armed as "pending" (route was already capturing)');
-
-    raf.runOneFrame(); // draws using the now-armed state
     const state = win.__RW._crosshairState();
-    ok(state !== null, 'RW._crosshairState() reports a drawn crosshair');
+    ok(state !== null, 'RW._crosshairState() reports a drawn crosshair immediately');
     // 12in duct / 12 = 1ft; at this fixture's scale 1 world ft = 100 frame px
     // = 50 CSS px (1000 frame-px preview layer / 500 CSS-px frame, pixelRatio
     // 2) -> widthCssPx should be exactly 50.
     ok(Math.abs(state.widthCssPx - 50) < 1e-6, `widthCssPx is the duct\'s true on-screen width (got ${state.widthCssPx})`);
-    ok(state.widthIn === 12, 'widthIn reflects the armed route\'s own profile');
+    ok(state.widthIn === 12, 'widthIn reflects the route\'s own profile');
   }
 
-  /* ---- 5. placing the next vertex (vertex count changes) disarms a "pending" crosshair ---- */
+  /* ---- 5. stays active across every duct-drawing tool native's own guide circle covers (route/flex/extend/transition/branch) ---- */
+  {
+    for (const tool of ['route', 'flex', 'extend', 'transition', 'branch']) {
+      const { win, byId, raf } = makeStubWindow();
+      makeGraphLayers(byId);
+      win.__graphDebug = makeGraphDebug({ activeTool: tool });
+      loadModule(win);
+      raf.runOneFrame();
+      ok(win.__RW._crosshairState() !== null, `active while activeTool is "${tool}"`);
+    }
+  }
+
+  /* ---- 6. not active on any OTHER tool, e.g. select ---- */
   {
     const { win, byId, raf } = makeStubWindow();
     makeGraphLayers(byId);
-    win.__graphDebug = makeGraphDebug();
+    win.__graphDebug = makeGraphDebug({ activeTool: 'select' });
     loadModule(win);
     raf.runOneFrame();
-    const { buttons } = makeClickMenu(byId, ['Elbow round']);
-    clickButton(win, buttons[0]);
-    raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() !== null, 'sanity: armed before the next click');
+    ok(win.__RW._crosshairState() === null, 'inactive while a non-drawing tool (select) is active');
+  }
 
+  /* ---- 7. active even BEFORE the first vertex is placed (route.status "idle", no vertices yet) — matches native's own guide-circle condition, which never gates on status ---- */
+  {
+    const { win, byId, raf } = makeStubWindow();
+    makeGraphLayers(byId);
     win.__graphDebug = makeGraphDebug({
-      route: {
-        status: 'capturing', mode: 'route', profile: { width_in: 12 },
-        vertices: [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 2, y: 2 }], startDirection: null,
-      },
+      route: { status: 'idle', mode: 'route', profile: { width_in: 12 }, vertices: [], startDirection: null },
     });
+    loadModule(win);
     raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() === null, 'disarmed once a new vertex is appended (consumed pendingElbowStyle)');
+    ok(win.__RW._crosshairState() !== null, 'active with an armed tool and a real profile even before any vertex is placed');
   }
 
-  /* ---- 6. picking an elbow style from the OPEN-END menu (not yet capturing) arms "continuation", which survives the vertex count changing ---- */
+  /* ---- 8. no duct size set yet -> nothing drawn ---- */
   {
     const { win, byId, raf } = makeStubWindow();
     makeGraphLayers(byId);
-    win.__graphDebug = makeGraphDebug({ activeTool: 'select', route: { status: 'idle', mode: 'route', profile: null, vertices: [] } });
+    win.__graphDebug = makeGraphDebug({ route: { status: 'idle', mode: 'route', profile: null, vertices: [], startDirection: null } });
     loadModule(win);
     raf.runOneFrame();
-    const { buttons } = makeClickMenu(byId, ['Elbow round', 'Continue duct']);
-    clickButton(win, buttons[0]);
-    ok(win.__RW._crosshairArmState().kind === 'continuation', 'armed as "continuation" (route was not yet capturing at pick time)');
-
-    win.__graphDebug = makeGraphDebug({
-      activeTool: 'route',
-      route: { status: 'capturing', mode: 'route', profile: { width_in: 12 }, vertices: [{ x: 0, y: 0 }], startDirection: { x: 1, y: 0 } },
-    });
-    raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() !== null, 'still armed right after the seed vertex lands');
-
-    win.__graphDebug = makeGraphDebug({
-      activeTool: 'route',
-      route: { status: 'capturing', mode: 'route', profile: { width_in: 12 }, vertices: [{ x: 0, y: 0 }, { x: 2, y: 2 }], startDirection: { x: 1, y: 0 } },
-    });
-    raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() !== null, 'a "continuation" arm survives a later vertex count change, unlike "pending"');
+    ok(win.__RW._crosshairState() === null, 'nothing drawn without a usable duct width');
   }
 
-  /* ---- 7. picking an item via the numbered digit key arms it the same as a click ---- */
+  /* ---- 9. switching away from a drawing tool clears the crosshair on the very next tick ---- */
   {
     const { win, byId, raf } = makeStubWindow();
     makeGraphLayers(byId);
     win.__graphDebug = makeGraphDebug();
     loadModule(win);
     raf.runOneFrame();
-    makeClickMenu(byId, ['Continue (straight)', 'Elbow rectangular', 'Elbow round']);
-    pressKey(win, '2'); // "2. Elbow rectangular"
-    ok(win.__RW._crosshairArmState() !== null, 'digit keydown arms the crosshair the same way a click would');
-  }
-
-  /* ---- 8. Escape disarms ---- */
-  {
-    const { win, byId, raf } = makeStubWindow();
-    makeGraphLayers(byId);
-    win.__graphDebug = makeGraphDebug();
-    loadModule(win);
-    raf.runOneFrame();
-    const { buttons } = makeClickMenu(byId, ['Elbow round']);
-    clickButton(win, buttons[0]);
-    ok(win.__RW._crosshairArmState() !== null, 'sanity: armed');
-    pressKey(win, 'Escape');
-    ok(win.__RW._crosshairArmState() === null, 'Escape disarms immediately');
-  }
-
-  /* ---- 9. switching tools away from route/flex disarms ---- */
-  {
-    const { win, byId, raf } = makeStubWindow();
-    makeGraphLayers(byId);
-    win.__graphDebug = makeGraphDebug();
-    loadModule(win);
-    raf.runOneFrame();
-    const { buttons } = makeClickMenu(byId, ['Elbow round']);
-    clickButton(win, buttons[0]);
-    raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() !== null, 'sanity: armed');
+    ok(win.__RW._crosshairState() !== null, 'sanity: drawing while route is active');
 
     win.__graphDebug = makeGraphDebug({ activeTool: 'select' });
     raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() === null, 'disarmed once activeTool leaves route/flex');
+    ok(win.__RW._crosshairState() === null, 'cleared the instant activeTool leaves the drawing-tool set');
   }
 
   /* ---- 10. RW._crosshairEnabled = false stops drawing without needing a reload ---- */
@@ -459,33 +407,44 @@ function pressKey(win, key) {
     win.__graphDebug = makeGraphDebug();
     loadModule(win);
     raf.runOneFrame();
-    const { buttons } = makeClickMenu(byId, ['Elbow round']);
-    clickButton(win, buttons[0]);
-    raf.runOneFrame();
     ok(win.__RW._crosshairState() !== null, 'sanity: drawing while enabled');
+    const ctx = byId['rw-crosshair-layer'].getContext('2d');
+    const fillCountWhileEnabled = ctx._calls.filter((c) => c.op === 'fillRect').length;
+    ok(fillCountWhileEnabled === 2, 'sanity: exactly 2 band fills happened while enabled');
 
     win.__RW._crosshairEnabled = false;
     raf.runOneFrame();
-    ok(win.__RW._crosshairArmState() !== null, 'arm-state itself is untouched by the killswitch (still armed underneath)');
-    // draw() only runs through tick()'s early-return when disabled, so the
-    // module never updates _crosshairLastState again — clearOverlay() is
-    // called instead, and the canvas context stub doesn't track pixels, so
-    // this checks the module took the disabled branch via the arm-state
-    // check above plus the absence of a thrown error.
+    const fillCountAfterDisable = ctx._calls.filter((c) => c.op === 'fillRect').length;
+    ok(fillCountAfterDisable === fillCountWhileEnabled, 'no new band is drawn on the tick after disabling');
+    ok(ctx._calls.some((c) => c.op === 'clearRect'), 'the overlay is cleared instead');
+    ok(win.__RW._crosshairState() === null, 'the debug hatch reports null too, not a stale last-drawn snapshot');
   }
 
-  /* ---- 11. a picked NON-elbow, non-straight item ends a "pending" arm but leaves an un-armed state alone ---- */
+  /* ---- 11. never rotates: no translate/rotate call is EVER made, and both fillRect calls are plain axis-aligned rectangles matching the duct width ---- */
   {
     const { win, byId, raf } = makeStubWindow();
-    makeGraphLayers(byId);
+    const { stage } = makeGraphLayers(byId);
     win.__graphDebug = makeGraphDebug();
     loadModule(win);
     raf.runOneFrame();
-    const { buttons } = makeClickMenu(byId, ['Elbow round', 'Reducer / transition']);
-    clickButton(win, buttons[0]);
-    ok(win.__RW._crosshairArmState() !== null, 'sanity: armed');
-    clickButton(win, buttons[1]); // a second, unrelated menu on the same page
-    ok(win.__RW._crosshairArmState() === null, 'an unrelated checkpoint pick ends a "pending" arm');
+
+    const overlay = byId['rw-crosshair-layer'];
+    ok(!!overlay, 'the overlay canvas was created');
+    const ctx = overlay.getContext('2d');
+    const rotateOrTranslateCalls = ctx._calls.filter((c) => c.op === 'translate' || c.op === 'rotate');
+    ok(rotateOrTranslateCalls.length === 0, 'no translate/rotate call was ever made — the crosshair never rotates');
+    const fillRectCalls = ctx._calls.filter((c) => c.op === 'fillRect');
+    ok(fillRectCalls.length === 2, 'exactly two fillRect calls (the horizontal and vertical band)');
+    // dpr defaults to 1 in this fixture, so canvas px == CSS px: widthCanvasPx
+    // should be 50 (same math as test 4), matching one call's thickness on
+    // its thin axis (height for the horizontal band, width for the vertical
+    // one) — this is a genuinely independent check from RW._crosshairState(),
+    // reading what was actually handed to the canvas API.
+    const horizontal = fillRectCalls.find((c) => c.width > c.height);
+    const vertical = fillRectCalls.find((c) => c.height > c.width);
+    ok(!!horizontal && !!vertical, 'one call is wide+short (horizontal band), the other tall+narrow (vertical band)');
+    ok(Math.abs(horizontal.height - 50) < 1e-6, `horizontal band thickness matches the duct width (got ${horizontal && horizontal.height})`);
+    ok(Math.abs(vertical.width - 50) < 1e-6, `vertical band thickness matches the duct width (got ${vertical && vertical.width})`);
   }
 
   console.log(pass + ' passed, ' + fail + ' failed');

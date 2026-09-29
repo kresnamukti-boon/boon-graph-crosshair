@@ -1,11 +1,10 @@
 // Pure, DOM-free geometry: replicates just enough of native's own world<->screen
 // math (graph-session-entry.js's spatialToFramePx/framePxToClientPoint/
 // framePxPerFootAt, confirmed live/read against the local source copy under
-// construction-tagger-webv2/project_graph/js/) to size and orient a crosshair
-// at the cursor to the ARMED duct's real plan width, in CSS pixels — without
-// ever reaching into native's own module-private state (there is none to
-// reach into from a pasted console script; see src/console/shell.js's own
-// header).
+// construction-tagger-webv2/project_graph/js/) to size a crosshair at the
+// cursor to the duct's real plan width, in CSS pixels — without ever reaching
+// into native's own module-private state (there is none to reach into from a
+// pasted console script; see src/console/shell.js's own header).
 //
 // One real gap vs. native, left deliberate rather than silently "fixed":
 // native's own framePxPerFootAt samples a PageRegion's own spatial frame when
@@ -91,60 +90,40 @@ export function ductWidthCssPx(widthInches, cssPxPerFoot) {
   return Number.isFinite(px) && px > 0 ? px : null;
 }
 
-// Screen-space angle (radians, atan2 convention) of the leg the armed elbow
-// bends off of — the last placed segment (vertices[len-2] -> vertices[len-1]),
-// or the source connector's own direction when only a seed vertex exists yet
-// (a fresh continuation). Converted through the SAME world->client mapping as
-// the crosshair's own center, so a rotated/flipped page transform still lines
-// the crosshair up with the real drawn duct edges, not with raw world axes.
-// Returns null when no direction is known yet — callers fall back to an
-// axis-aligned (unrotated) crosshair rather than guessing.
-export function legAngleClient(vertices, startDirection, transform, frameSize, frameRect, pixelRatio) {
-  let a = null;
-  let b = null;
-  if (Array.isArray(vertices) && vertices.length >= 2) {
-    a = vertices[vertices.length - 2];
-    b = vertices[vertices.length - 1];
-  } else if (Array.isArray(vertices) && vertices.length === 1 && startDirection
-    && (startDirection.x !== 0 || startDirection.y !== 0)) {
-    a = vertices[0];
-    b = { x: a.x + startDirection.x, y: a.y + startDirection.y, z: a.z ?? 0 };
-  } else {
-    return null;
-  }
-  const pa = spatialToClientPoint(a, transform, frameSize, frameRect, pixelRatio);
-  const pb = spatialToClientPoint(b, transform, frameSize, frameRect, pixelRatio);
-  if (!pa || !pb) return null;
-  const dx = pb.x - pa.x;
-  const dy = pb.y - pa.y;
-  if (dx === 0 && dy === 0) return null;
-  return Math.atan2(dy, dx);
-}
-
 // The crosshair itself: two perpendicular BANDS (thick lines, not hairlines)
 // crossing at `center` (whatever pixel space the caller is drawing in — CSS
 // or canvas-backing — as long as thicknessPx/spanPx are in the same space).
 // Each band is `thicknessPx` thick (the duct's own true on-screen width) and
 // `spanPx` long, centered on `center` — `spanPx` is the CALLER's job to make
 // large enough (e.g. the overlay canvas's own diagonal, doubled) that both
-// bands visibly run off every edge of the canvas regardless of rotation,
-// reading as a full alignment guide rather than a small mark at the cursor
-// (Kresna's own correction: "a solid crosshair expanding beyond the canvas
-// with the width of the duct", replacing an earlier round's small
-// width-length tick-mark crosshair). `angleRad` rotates the "across" band to
-// sit perpendicular to the run's own direction (the one that actually needs
-// to line up with the two parallel duct walls elsewhere on the page);
-// axis-aligned (0 rad) when the direction isn't known. Returns each band as
-// a center + angle + length + thickness, for the caller to fill as a rotated
-// rectangle (`ctx.translate`/`ctx.rotate`/`ctx.fillRect`) rather than a list
-// of points — a rotated filled rectangle isn't expressible as a flat point
-// list the way the two short segments this replaces were.
-export function crosshairBands(center, thicknessPx, angleRad, spanPx) {
-  const angle = Number.isFinite(angleRad) ? angleRad : 0;
-  const band = { cx: center.x, cy: center.y, length: spanPx, thickness: thicknessPx };
+// bands visibly run off every edge of the canvas, reading as a full
+// alignment guide rather than a small mark at the cursor (Kresna's own
+// correction: "a solid crosshair expanding beyond the canvas with the width
+// of the duct", replacing an earlier round's small width-length tick-mark
+// crosshair).
+//
+// Deliberately ALWAYS screen-axis-aligned, with no angle input at all
+// (Kresna's own explicit follow-up correction: "make sure it doesnt rotate
+// relative to the duct", removing an even earlier round's attempt to rotate
+// the crosshair to the duct's own travel direction). Not just "the caller
+// happens to not pass an angle" — there is no angle parameter to this
+// function any more, so a future caller can't accidentally reintroduce
+// rotation by passing one. Returns each band as a ready-to-fill rectangle
+// (`{x, y, width, height}`, top-left + size — exactly `ctx.fillRect`'s own
+// argument order) rather than a center+angle descriptor, since axis-aligned
+// rectangles need no `ctx.translate`/`ctx.rotate` at all.
+export function crosshairBands(center, thicknessPx, spanPx) {
+  const halfThickness = thicknessPx / 2;
+  const halfSpan = spanPx / 2;
   return {
     thickness: thicknessPx,
-    along: { ...band, angle },
-    across: { ...band, angle: angle + Math.PI / 2 },
+    horizontal: {
+      x: center.x - halfSpan, y: center.y - halfThickness,
+      width: spanPx, height: thicknessPx,
+    },
+    vertical: {
+      x: center.x - halfThickness, y: center.y - halfSpan,
+      width: thicknessPx, height: spanPx,
+    },
   };
 }
