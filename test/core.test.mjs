@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   spatialToFramePx, framePxToClientPoint, spatialToClientPoint,
-  cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands,
+  cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal,
 } from '../src/core/geom.js';
 
 // An identity-ish transform: origin at world (0,0), x/y axes span 10 world
@@ -127,4 +127,24 @@ test('crosshairBands: has no angle/rotation input at all — always screen-axis-
   // to the duct"): the function signature itself has no angle parameter, so
   // there's nothing for a caller to pass that would rotate either band.
   assert.equal(crosshairBands.length, 3); // (center, thicknessPx, spanPx) only
+});
+
+test('crosshairBandsDiagonal: two perpendicular 45° bands, spanPx long, thicknessPx thick, centered on the point', () => {
+  const d = crosshairBandsDiagonal({ x: 100, y: 50 }, 20, 1000);
+  const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+  const dir = (pts) => ({ x: pts[1].x - pts[0].x, y: pts[1].y - pts[0].y });
+  for (const pts of [d.a, d.b]) {
+    assert.equal(pts.length, 4);
+    assert.ok(Math.abs(dist(pts[0], pts[1]) - 1000) < 1e-9);
+    assert.ok(Math.abs(dist(pts[1], pts[2]) - 20) < 1e-9);
+    const cx = pts.reduce((s, p) => s + p.x, 0) / 4;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / 4;
+    assert.ok(Math.abs(cx - 100) < 1e-9 && Math.abs(cy - 50) < 1e-9);
+    const v = dir(pts);
+    assert.ok(Math.abs(Math.abs(v.x) - Math.abs(v.y)) < 1e-9); // exactly 45° off-axis
+  }
+  const va = dir(d.a);
+  const vb = dir(d.b);
+  assert.ok(Math.abs(va.x * vb.x + va.y * vb.y) < 1e-6); // perpendicular
+  assert.equal(crosshairBandsDiagonal.length, 3); // still no angle parameter
 });

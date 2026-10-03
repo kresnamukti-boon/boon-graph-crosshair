@@ -112,6 +112,11 @@ export function ductWidthCssPx(widthInches, cssPxPerFoot) {
 // (`{x, y, width, height}`, top-left + size — exactly `ctx.fillRect`'s own
 // argument order) rather than a center+angle descriptor, since axis-aligned
 // rectangles need no `ctx.translate`/`ctx.rotate` at all.
+//
+// `crosshairBandsDiagonal` below is the ONE other fixed orientation (Kresna's
+// round-4 ask: tap Ctrl to turn the "+" into an "×"). It too takes no angle —
+// only ever ±45° from the screen axes — so it is a user-toggled second state,
+// never duct-following rotation.
 export function crosshairBands(center, thicknessPx, spanPx) {
   const halfThickness = thicknessPx / 2;
   const halfSpan = spanPx / 2;
@@ -126,4 +131,25 @@ export function crosshairBands(center, thicknessPx, spanPx) {
       width: thicknessPx, height: spanPx,
     },
   };
+}
+
+// The same two bands as crosshairBands, turned 45° (an "×"). Each band is a
+// rotated rectangle returned as 4 corner points (in drawing order) ready for
+// beginPath/moveTo/lineTo/closePath/fill — no ctx.translate/rotate needed.
+// `a` runs along the 45° diagonal (down-right), `b` along 135° (down-left).
+// `thicknessPx` is measured perpendicular to each band's own length.
+export function crosshairBandsDiagonal(center, thicknessPx, spanPx) {
+  const h = thicknessPx / 2;
+  const s = spanPx / 2;
+  const k = Math.SQRT1_2;
+  function band(ux, uy) {
+    const px = -uy;
+    const py = ux;
+    const at = (along, across) => ({
+      x: center.x + ux * along * k + px * across * k,
+      y: center.y + uy * along * k + py * across * k,
+    });
+    return [at(-s, -h), at(s, -h), at(s, h), at(-s, h)];
+  }
+  return { thickness: thicknessPx, a: band(1, 1), b: band(1, -1) };
 }

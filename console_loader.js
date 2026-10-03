@@ -134,6 +134,11 @@ function ductWidthCssPx(widthInches, cssPxPerFoot) {
 // (`{x, y, width, height}`, top-left + size — exactly `ctx.fillRect`'s own
 // argument order) rather than a center+angle descriptor, since axis-aligned
 // rectangles need no `ctx.translate`/`ctx.rotate` at all.
+//
+// `crosshairBandsDiagonal` below is the ONE other fixed orientation (Kresna's
+// round-4 ask: tap Ctrl to turn the "+" into an "×"). It too takes no angle —
+// only ever ±45° from the screen axes — so it is a user-toggled second state,
+// never duct-following rotation.
 function crosshairBands(center, thicknessPx, spanPx) {
   const halfThickness = thicknessPx / 2;
   const halfSpan = spanPx / 2;
@@ -150,7 +155,28 @@ function crosshairBands(center, thicknessPx, spanPx) {
   };
 }
 
-return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands};
+// The same two bands as crosshairBands, turned 45° (an "×"). Each band is a
+// rotated rectangle returned as 4 corner points (in drawing order) ready for
+// beginPath/moveTo/lineTo/closePath/fill — no ctx.translate/rotate needed.
+// `a` runs along the 45° diagonal (down-right), `b` along 135° (down-left).
+// `thicknessPx` is measured perpendicular to each band's own length.
+function crosshairBandsDiagonal(center, thicknessPx, spanPx) {
+  const h = thicknessPx / 2;
+  const s = spanPx / 2;
+  const k = Math.SQRT1_2;
+  function band(ux, uy) {
+    const px = -uy;
+    const py = ux;
+    const at = (along, across) => ({
+      x: center.x + ux * along * k + px * across * k,
+      y: center.y + uy * along * k + py * across * k,
+    });
+    return [at(-s, -h), at(s, -h), at(s, h), at(-s, h)];
+  }
+  return { thickness: thicknessPx, a: band(1, 1), b: band(1, -1) };
+}
+
+return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal};
 })();
 
 // ===== src/console/shell.js =====
@@ -186,7 +212,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   // mechanism) — shell.js is appended verbatim, so it must pull these out
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
-    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands,
+    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal,
   } = __m_geom;
 
   function status(msg) {
@@ -281,11 +307,11 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     // every edge — twice the canvas's own diagonal is generous headroom over
     // the minimum (one diagonal) that guarantees this from a corner.
     const spanPx = 2 * Math.hypot(width, height);
-    const bands = crosshairBands(centerCanvas, widthCanvasPx, spanPx);
+    const diagonal = !!RW._crosshairDiagonal;
 
     RW._crosshairLastState = {
       activeTool: gd.activeTool, widthIn: widthIn, widthCssPx: widthCssPx,
-      cursorClient: cursorClient,
+      cursorClient: cursorClient, diagonal: diagonal,
     };
 
     const ctx = overlayCtx;
@@ -297,8 +323,22 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     // never confused. Screen-axis-aligned rectangles (see crosshairBands's
     // own header) — no rotation, no translate/rotate needed.
     ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-    ctx.fillRect(bands.horizontal.x, bands.horizontal.y, bands.horizontal.width, bands.horizontal.height);
-    ctx.fillRect(bands.vertical.x, bands.vertical.y, bands.vertical.width, bands.vertical.height);
+    if (diagonal) {
+      // Ctrl-toggled "×" state: two 45° polygons, filled as one path per band
+      // (still no ctx.translate/rotate).
+      const d = crosshairBandsDiagonal(centerCanvas, widthCanvasPx, spanPx);
+      [d.a, d.b].forEach((pts) => {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.fill();
+      });
+    } else {
+      const bands = crosshairBands(centerCanvas, widthCanvasPx, spanPx);
+      ctx.fillRect(bands.horizontal.x, bands.horizontal.y, bands.horizontal.width, bands.horizontal.height);
+      ctx.fillRect(bands.vertical.x, bands.vertical.y, bands.vertical.width, bands.vertical.height);
+    }
     ctx.restore();
   }
 
@@ -316,13 +356,46 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   }
   RW._crosshairRaf = requestAnimationFrame(tick);
 
+  // ----- bare-Ctrl tap toggles "+" <-> "×" -----
+  // Ctrl is also a modifier natively (Ctrl+wheel zoom, Ctrl+Z/Y/D/A, Ctrl+
+  // click), so only a Ctrl press-and-release with nothing in between counts.
+  // Never preventDefault — native's own Ctrl shortcuts stay untouched.
+  if (RW._crosshairDiagonal === undefined) RW._crosshairDiagonal = false;
+  let ctrlArmed = false;
+  function typingInField() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = String(el.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!el.isContentEditable;
+  }
+  function drawingToolActive() {
+    const gd = window.__graphDebug;
+    return !!gd && DRAWING_TOOLS.includes(gd.activeTool);
+  }
+  function disarm() { ctrlArmed = false; }
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'Control') {
+      if (!e.repeat) ctrlArmed = !typingInField() && drawingToolActive();
+    } else {
+      disarm();
+    }
+  }, true);
+  window.addEventListener('keyup', function (e) {
+    if (e.key !== 'Control') return;
+    if (ctrlArmed) RW._crosshairDiagonal = !RW._crosshairDiagonal;
+    ctrlArmed = false;
+  }, true);
+  window.addEventListener('pointerdown', disarm, true);
+  window.addEventListener('wheel', disarm, true);
+  window.addEventListener('blur', disarm);
+
   // ----- console-facing hatches -----
   // Killswitch: __RW._crosshairEnabled = false stops drawing without needing
   // a page reload.
   if (RW._crosshairEnabled === undefined) RW._crosshairEnabled = true;
   RW._crosshairState = function () { return RW._crosshairLastState || null; };
 
-  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active');
+  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°)');
 })()
 
 })()

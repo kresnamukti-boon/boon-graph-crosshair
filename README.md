@@ -11,8 +11,10 @@ current duct's own real plan width (rectangular `width_in`, or `diameter_in` for
 on-screen pixels, at 20% opacity so the PDF underneath stays visible. Instead of eyeballing a
 corner against the two duct edges already drawn on the PDF, you can line the band up against them
 anywhere along its length — including well away from the cursor, e.g. against another duct run
-elsewhere on the sheet. The crosshair is always screen-axis-aligned — it never rotates to match
-the duct's own travel direction.
+elsewhere on the sheet. The crosshair never rotates to match the duct's own travel direction —
+it has exactly two fixed orientations: "+" (screen-axis-aligned, the default) and "×" (turned 45°).
+**Tap Ctrl** (press and release with nothing in between) to switch to "×"; tap again to return to
+"+". Ctrl+wheel zoom, Ctrl+Z/Y/D/A and Ctrl+click are unaffected and never toggle it.
 
 Fully standalone — no coupling to any sibling RW-family add-on, works with or without them pasted
 on the same page, **in either paste order** (confirmed live pasted alongside `boon-command-line`:
@@ -29,8 +31,10 @@ real reload or a fresh paste either way).
 
 - `RW._crosshairEnabled = false` — killswitch: stops drawing without needing a page reload. Set
   back to `true` (the default) to resume.
+- `RW._crosshairDiagonal` — `true` = "×" (45°), `false` = "+". Flipped by a bare Ctrl tap while a
+  duct-drawing tool is active; also settable directly.
 - `RW._crosshairState()` — the last drawn crosshair's own inputs: `{activeTool, widthIn,
-  widthCssPx, cursorClient}`, or `null` if nothing is currently drawn (kept in sync every tick —
+  widthCssPx, cursorClient, diagonal}`, or `null` if nothing is currently drawn (kept in sync every tick —
   never a stale snapshot from an earlier tool/draw).
 
 ## Files & load order

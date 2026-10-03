@@ -134,8 +134,11 @@ function makeCanvasContext() {
   return {
     _calls: calls,
     clearRect() { calls.push({ op: 'clearRect' }); },
-    beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
-    save() {}, restore() {}, arc() {}, fill() {},
+    beginPath() {}, closePath() {}, stroke() {},
+    moveTo(x, y) { calls.push({ op: 'moveTo', x, y }); },
+    lineTo(x, y) { calls.push({ op: 'lineTo', x, y }); },
+    fill() { calls.push({ op: 'fill' }); },
+    save() {}, restore() {}, arc() {},
     fillRect(x, y, width, height) { calls.push({ op: 'fillRect', x, y, width, height }); },
     strokeRect() {},
     translate(x, y) { calls.push({ op: 'translate', x, y }); },
@@ -445,6 +448,66 @@ function loadModule(win) {
     ok(!!horizontal && !!vertical, 'one call is wide+short (horizontal band), the other tall+narrow (vertical band)');
     ok(Math.abs(horizontal.height - 50) < 1e-6, `horizontal band thickness matches the duct width (got ${horizontal && horizontal.height})`);
     ok(Math.abs(vertical.width - 50) < 1e-6, `vertical band thickness matches the duct width (got ${vertical && vertical.width})`);
+  }
+
+  /* ---- 12. bare Ctrl tap toggles the "×" (45°) state and back; modifiers/other input in between do not ---- */
+  {
+    const setup = (opts) => {
+      const { win, byId, raf } = makeStubWindow();
+      makeGraphLayers(byId);
+      win.__graphDebug = makeGraphDebug(opts);
+      loadModule(win);
+      raf.runOneFrame();
+      const overlay = byId['rw-crosshair-layer'];
+      const ctx = overlay ? overlay.getContext('2d') : { _calls: [] };
+      const count = (op) => ctx._calls.filter((c) => c.op === op).length;
+      const tap = () => {
+        win.dispatchEvent({ type: 'keydown', key: 'Control' });
+        win.dispatchEvent({ type: 'keyup', key: 'Control' });
+      };
+      return { win, raf, ctx, count, tap };
+    };
+
+    {
+      const { win, raf, ctx, count, tap } = setup();
+      ok(win.__RW._crosshairState().diagonal === false, 'starts axis-aligned');
+      tap();
+      raf.runOneFrame();
+      ok(win.__RW._crosshairState().diagonal === true, 'a bare Ctrl tap switches to diagonal');
+      ok(count('fillRect') === 2, 'no new fillRect while diagonal');
+      ok(count('fill') === 2, 'two polygon fills while diagonal');
+      ok(ctx._calls.filter((c) => c.op === 'translate' || c.op === 'rotate').length === 0, 'diagonal mode still never calls translate/rotate');
+      tap();
+      raf.runOneFrame();
+      ok(win.__RW._crosshairState().diagonal === false, 'a second tap returns to axis-aligned');
+      ok(count('fillRect') === 4, 'fillRect bands are drawn again');
+    }
+    {
+      const { win, tap } = setup();
+      win.dispatchEvent({ type: 'keydown', key: 'Control' });
+      win.dispatchEvent({ type: 'keydown', key: 'Control', repeat: true });
+      win.dispatchEvent({ type: 'keyup', key: 'Control' });
+      ok(win.__RW._crosshairDiagonal === true, 'key auto-repeat keydowns do not break the tap');
+    }
+    {
+      const { win } = setup();
+      win.dispatchEvent({ type: 'keydown', key: 'Control' });
+      win.dispatchEvent({ type: 'keydown', key: 'z' });
+      win.dispatchEvent({ type: 'keyup', key: 'Control' });
+      ok(win.__RW._crosshairDiagonal === false, 'Ctrl+Z does not toggle');
+    }
+    for (const evt of ['wheel', 'pointerdown', 'blur']) {
+      const { win } = setup();
+      win.dispatchEvent({ type: 'keydown', key: 'Control' });
+      win.dispatchEvent({ type: evt });
+      win.dispatchEvent({ type: 'keyup', key: 'Control' });
+      ok(win.__RW._crosshairDiagonal === false, `Ctrl held through a ${evt} does not toggle`);
+    }
+    {
+      const { win, tap } = setup({ activeTool: 'select' });
+      tap();
+      ok(win.__RW._crosshairDiagonal === false, 'a Ctrl tap while no drawing tool is active does not toggle');
+    }
   }
 
   console.log(pass + ' passed, ' + fail + ' failed');
