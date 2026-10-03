@@ -510,7 +510,7 @@ function loadModule(win) {
     }
   }
 
-  /* ---- 13. on-screen panel: on/off button and 1px button ---- */
+  /* ---- 13. on-screen panel: on/off button and 5px button ---- */
   {
     const { win, byId, raf } = makeStubWindow();
     makeGraphLayers(byId);
@@ -526,10 +526,10 @@ function loadModule(win) {
 
     thinBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
-    ok(thinBtn.textContent === 'Width: 1px', 'thin label flips');
+    ok(thinBtn.textContent === 'Width: 5px', 'thin label flips');
     ok(win.__RW._crosshairState().thin === true, 'state reports thin');
     const last2 = fills().slice(-2);
-    ok(last2.some((c) => c.height === 1) && last2.some((c) => c.width === 1), 'both bands are 1px thick');
+    ok(last2.some((c) => c.height === 5) && last2.some((c) => c.width === 5), 'both bands are 5px thick');
 
     thinBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
@@ -572,7 +572,7 @@ function loadModule(win) {
     loadModule(win);
     win.__RW._crosshairThin = true;
     raf.runOneFrame();
-    ok(win.__RW._crosshairState() !== null, '1px crosshair draws even without a duct profile');
+    ok(win.__RW._crosshairState() !== null, '5px crosshair draws even without a duct profile');
   }
 
   console.log(pass + ' passed, ' + fail + ' failed');

@@ -22,7 +22,7 @@ shared `window.__RW` namespace, no field collisions). Read-only: never clicks, d
 any annotation state — only reads `window.__graphDebug`'s existing read-only getters.
 
 A small draggable panel (default bottom-centre; drag the ☰ grip to move it, position is remembered) has two buttons: **Crosshair: On/Off** (hide/show it without
-leaving the drawing tool) and **Width: Duct/1px** (switch the bands to a 1px-thick hairline
+leaving the drawing tool) and **Width: Duct/5px** (switch the bands to a 5px-thick
 crosshair, which also works when no duct size is set). Ctrl-tap rotation applies to both widths.
 
 ## Injection
@@ -35,7 +35,7 @@ real reload or a fresh paste either way).
 
 - `RW._crosshairEnabled = false` — killswitch (also the panel's On/Off button): stops drawing without needing a page reload. Set
   back to `true` (the default) to resume.
-- `RW._crosshairThin` — `true` = 1px bands, `false` = duct width. Driven by the panel button.
+- `RW._crosshairThin` — `true` = 5px bands, `false` = duct width. Driven by the panel button.
 - `RW._crosshairDiagonal` — `true` = "×" (45°), `false` = "+". Flipped by a bare Ctrl tap while a
   duct-drawing tool is active; also settable directly.
 - `RW._crosshairState()` — the last drawn crosshair's own inputs: `{activeTool, widthIn,

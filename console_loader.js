@@ -225,6 +225,8 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   // transition/branch. Not gated on route.status at all (matching native's
   // own condition exactly), so the crosshair is already visible before the
   // very first click of a run, not just mid-draw.
+  // Thickness (CSS px) of the panel's thin mode.
+  const THIN_PX = 5;
   const DRAWING_TOOLS = ['route', 'flex', 'extend', 'transition', 'branch'];
 
   // ----- overlay layer -----
@@ -273,7 +275,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     const cursorClient = cursorOverlay && cursorOverlay.cursorClient;
     if (!stage || !frame || !previewLayer || !cursorClient) { clearOverlay(); return; }
 
-    // Thin mode (panel button) draws a 1px line, so it needs no duct width.
+    // Thin mode (panel button) draws a THIN_PX-thick line, so it needs no duct width.
     const thin = !!RW._crosshairThin;
     const profile = route ? route.profile : null;
     const widthIn = ductWidthInches(profile);
@@ -285,7 +287,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     const frameSize = { width: previewLayer.width, height: previewLayer.height };
     const spatialPoint = gd.pointer;
     const cssPxPerFoot = cssPxPerFootAt(spatialPoint, transform, frameSize, frameRect, pixelRatio);
-    const widthCssPx = thin ? 1 : ductWidthCssPx(widthIn, cssPxPerFoot);
+    const widthCssPx = thin ? THIN_PX : ductWidthCssPx(widthIn, cssPxPerFoot);
     if (!widthCssPx) { clearOverlay(); return; }
 
     const canvas = ensureOverlay();
@@ -346,7 +348,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
 
   // ----- on-screen toggle panel -----
   // Two buttons: crosshair on/off (RW._crosshairEnabled) and duct-width vs
-  // 1px line (RW._crosshairThin). Labels re-sync every tick so console
+  // thin line (RW._crosshairThin). Labels re-sync every tick so console
   // changes to either flag show up too.
   if (RW._crosshairThin === undefined) RW._crosshairThin = false;
   let panelEl = null;
@@ -427,7 +429,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     ensurePanel();
     const on = RW._crosshairEnabled !== false;
     const enabledText = 'Crosshair: ' + (on ? 'On' : 'Off');
-    const thinText = 'Width: ' + (RW._crosshairThin ? '1px' : 'Duct');
+    const thinText = 'Width: ' + (RW._crosshairThin ? THIN_PX + 'px' : 'Duct');
     if (enabledBtn.textContent !== enabledText) enabledBtn.textContent = enabledText;
     if (thinBtn.textContent !== thinText) thinBtn.textContent = thinText;
   }
@@ -486,7 +488,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   if (RW._crosshairEnabled === undefined) RW._crosshairEnabled = true;
   RW._crosshairState = function () { return RW._crosshairLastState || null; };
 
-  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°; draggable panel for on/off and 1px)');
+  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°; draggable panel for on/off and thin mode)');
 })()
 
 })()
