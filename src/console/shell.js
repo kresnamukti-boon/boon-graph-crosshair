@@ -91,9 +91,11 @@
     const cursorClient = cursorOverlay && cursorOverlay.cursorClient;
     if (!stage || !frame || !previewLayer || !cursorClient) { clearOverlay(); return; }
 
+    // Thin mode (panel button) draws a 1px line, so it needs no duct width.
+    const thin = !!RW._crosshairThin;
     const profile = route ? route.profile : null;
     const widthIn = ductWidthInches(profile);
-    if (!widthIn) { clearOverlay(); return; }
+    if (!widthIn && !thin) { clearOverlay(); return; }
 
     const transform = gd.transform;
     const frameRect = frame.getBoundingClientRect();
@@ -101,7 +103,7 @@
     const frameSize = { width: previewLayer.width, height: previewLayer.height };
     const spatialPoint = gd.pointer;
     const cssPxPerFoot = cssPxPerFootAt(spatialPoint, transform, frameSize, frameRect, pixelRatio);
-    const widthCssPx = ductWidthCssPx(widthIn, cssPxPerFoot);
+    const widthCssPx = thin ? 1 : ductWidthCssPx(widthIn, cssPxPerFoot);
     if (!widthCssPx) { clearOverlay(); return; }
 
     const canvas = ensureOverlay();
@@ -129,7 +131,7 @@
 
     RW._crosshairLastState = {
       activeTool: gd.activeTool, widthIn: widthIn, widthCssPx: widthCssPx,
-      cursorClient: cursorClient, diagonal: diagonal,
+      cursorClient: cursorClient, diagonal: diagonal, thin: thin,
     };
 
     const ctx = overlayCtx;
@@ -160,8 +162,46 @@
     ctx.restore();
   }
 
+  // ----- on-screen toggle panel -----
+  // Two buttons: crosshair on/off (RW._crosshairEnabled) and duct-width vs
+  // 1px line (RW._crosshairThin). Labels re-sync every tick so console
+  // changes to either flag show up too.
+  if (RW._crosshairThin === undefined) RW._crosshairThin = false;
+  let panelEl = null;
+  let enabledBtn = null;
+  let thinBtn = null;
+  function makeButton(onClick) {
+    const b = document.createElement('button');
+    b.id = 'rw-crosshair-btn-' + (enabledBtn ? 'thin' : 'enabled');
+    b.style.cssText = 'font:12px system-ui,sans-serif;padding:4px 8px;cursor:pointer;'
+      + 'border:1px solid #06b6d4;border-radius:4px;background:#fff;color:#0e7490;';
+    b.addEventListener('click', onClick);
+    panelEl.appendChild(b);
+    return b;
+  }
+  function ensurePanel() {
+    if (panelEl && panelEl.isConnected) return;
+    panelEl = document.createElement('div');
+    panelEl.id = 'rw-crosshair-panel';
+    panelEl.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483001;'
+      + 'display:flex;gap:6px;';
+    document.body.appendChild(panelEl);
+    enabledBtn = null; thinBtn = null;
+    enabledBtn = makeButton(function () { RW._crosshairEnabled = RW._crosshairEnabled === false; });
+    thinBtn = makeButton(function () { RW._crosshairThin = !RW._crosshairThin; });
+  }
+  function syncPanel() {
+    ensurePanel();
+    const on = RW._crosshairEnabled !== false;
+    const enabledText = 'Crosshair: ' + (on ? 'On' : 'Off');
+    const thinText = 'Width: ' + (RW._crosshairThin ? '1px' : 'Duct');
+    if (enabledBtn.textContent !== enabledText) enabledBtn.textContent = enabledText;
+    if (thinBtn.textContent !== thinText) thinBtn.textContent = thinText;
+  }
+
   function tick() {
     RW._crosshairRaf = requestAnimationFrame(tick);
+    syncPanel();
     if (RW._crosshairEnabled === false) { clearOverlay(); return; }
     const gd = window.__graphDebug;
     if (!gd) { clearOverlay(); return; }
@@ -213,5 +253,5 @@
   if (RW._crosshairEnabled === undefined) RW._crosshairEnabled = true;
   RW._crosshairState = function () { return RW._crosshairLastState || null; };
 
-  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°)');
+  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°; panel buttons bottom-left for on/off and 1px)');
 })()

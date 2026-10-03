@@ -21,6 +21,10 @@ on the same page, **in either paste order** (confirmed live pasted alongside `bo
 shared `window.__RW` namespace, no field collisions). Read-only: never clicks, drags, or mutates
 any annotation state — only reads `window.__graphDebug`'s existing read-only getters.
 
+A small panel at the bottom-left has two buttons: **Crosshair: On/Off** (hide/show it without
+leaving the drawing tool) and **Width: Duct/1px** (switch the bands to a 1px-thick hairline
+crosshair, which also works when no duct size is set). Ctrl-tap rotation applies to both widths.
+
 ## Injection
 
 F12 → Console → paste `console_loader.js` in full → Enter. Paste again after each page
@@ -29,8 +33,9 @@ real reload or a fresh paste either way).
 
 ## Console-facing surface
 
-- `RW._crosshairEnabled = false` — killswitch: stops drawing without needing a page reload. Set
+- `RW._crosshairEnabled = false` — killswitch (also the panel's On/Off button): stops drawing without needing a page reload. Set
   back to `true` (the default) to resume.
+- `RW._crosshairThin` — `true` = 1px bands, `false` = duct width. Driven by the panel button.
 - `RW._crosshairDiagonal` — `true` = "×" (45°), `false` = "+". Flipped by a bare Ctrl tap while a
   duct-drawing tool is active; also settable directly.
 - `RW._crosshairState()` — the last drawn crosshair's own inputs: `{activeTool, widthIn,

@@ -510,6 +510,52 @@ function loadModule(win) {
     }
   }
 
+  /* ---- 13. on-screen panel: on/off button and 1px button ---- */
+  {
+    const { win, byId, raf } = makeStubWindow();
+    makeGraphLayers(byId);
+    win.__graphDebug = makeGraphDebug();
+    loadModule(win);
+    raf.runOneFrame();
+    const onBtn = byId['rw-crosshair-btn-enabled'];
+    const thinBtn = byId['rw-crosshair-btn-thin'];
+    ok(!!onBtn && !!thinBtn, 'both panel buttons exist');
+    ok(onBtn.textContent === 'Crosshair: On' && thinBtn.textContent === 'Width: Duct', 'initial labels');
+    const ctx = byId['rw-crosshair-layer'].getContext('2d');
+    const fills = () => ctx._calls.filter((c) => c.op === 'fillRect');
+
+    thinBtn.dispatchEvent({ type: 'click' });
+    raf.runOneFrame();
+    ok(thinBtn.textContent === 'Width: 1px', 'thin label flips');
+    ok(win.__RW._crosshairState().thin === true, 'state reports thin');
+    const last2 = fills().slice(-2);
+    ok(last2.some((c) => c.height === 1) && last2.some((c) => c.width === 1), 'both bands are 1px thick');
+
+    thinBtn.dispatchEvent({ type: 'click' });
+    raf.runOneFrame();
+    ok(Math.abs(fills().slice(-2).find((c) => c.width > c.height).height - 50) < 1e-6, 'back to duct width');
+
+    onBtn.dispatchEvent({ type: 'click' });
+    const before = fills().length;
+    raf.runOneFrame();
+    ok(onBtn.textContent === 'Crosshair: Off', 'on/off label flips');
+    ok(fills().length === before && win.__RW._crosshairState() === null, 'nothing drawn while off');
+    onBtn.dispatchEvent({ type: 'click' });
+    raf.runOneFrame();
+    ok(win.__RW._crosshairState() !== null, 'drawing again after switching back on');
+  }
+
+  /* ---- 14. thin mode needs no duct width ---- */
+  {
+    const { win, byId, raf } = makeStubWindow();
+    makeGraphLayers(byId);
+    win.__graphDebug = makeGraphDebug({ route: { status: 'idle', mode: 'route', profile: null, vertices: [], startDirection: null } });
+    loadModule(win);
+    win.__RW._crosshairThin = true;
+    raf.runOneFrame();
+    ok(win.__RW._crosshairState() !== null, '1px crosshair draws even without a duct profile');
+  }
+
   console.log(pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })();
