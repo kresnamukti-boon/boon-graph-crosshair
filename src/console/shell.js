@@ -46,7 +46,7 @@
   // Thickness (CSS px) of the panel's thin mode.
   const THIN_PX = 5;
   // Thickness (CSS px) of the red edge line itself.
-  const EDGE_PX = 15;
+  const EDGE_PX = 5;
   const DRAWING_TOOLS = ['route', 'flex', 'extend', 'transition', 'branch'];
 
   // ----- overlay layer -----

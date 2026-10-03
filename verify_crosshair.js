@@ -425,7 +425,7 @@ function loadModule(win) {
     ok(win.__RW._crosshairState() === null, 'the debug hatch reports null too, not a stale last-drawn snapshot');
   }
 
-  /* ---- 11. never rotates: no translate/rotate call is EVER made; ONE red 15px outline stroke, no fill, matching the duct width ---- */
+  /* ---- 11. never rotates: no translate/rotate call is EVER made; ONE red 5px outline stroke, no fill, matching the duct width ---- */
   {
     const { win, byId, raf } = makeStubWindow();
     makeGraphLayers(byId);
@@ -440,7 +440,7 @@ function loadModule(win) {
     ok(ctx._calls.filter((c) => c.op === 'fillRect' || c.op === 'fill').length === 0, 'nothing is filled — red edge only');
     const strokes = ctx._calls.filter((c) => c.op === 'stroke');
     ok(strokes.length === 1, 'exactly one outline stroke');
-    ok(strokes[0].lineWidth === 15, `the edge line is 15px thick (got ${strokes[0].lineWidth})`);
+    ok(strokes[0].lineWidth === 5, `the edge line is 5px thick (got ${strokes[0].lineWidth})`);
     ok(/^#e11d1d$/i.test(strokes[0].style), 'the edge is red');
     const pts = strokes[0].pts;
     ok(pts.length === 12, 'one 12-point union outline');

@@ -25,7 +25,7 @@ A small draggable panel (default bottom-centre; drag the ☰ grip to move it, po
 leaving the drawing tool) and **Width: Duct/5px** (switch the bands to a 5px-thick
 crosshair, which also works when no duct size is set). Ctrl-tap rotation applies to both widths.
 
-The crosshair is drawn as a **red edge only** — no fill — a 15px-thick red line tracing one closed
+The crosshair is drawn as a **red edge only** — no fill — a 5px-thick red line tracing one closed
 outline around the two bands (nothing drawn across the centre). The duct's true edge runs through
 the middle of the red line.
 
