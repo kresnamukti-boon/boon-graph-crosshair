@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   spatialToFramePx, framePxToClientPoint, spatialToClientPoint,
-  cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal,
+  cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal, crosshairOutline,
 } from '../src/core/geom.js';
 
 // An identity-ish transform: origin at world (0,0), x/y axes span 10 world
@@ -147,4 +147,19 @@ test('crosshairBandsDiagonal: two perpendicular 45° bands, spanPx long, thickne
   const vb = dir(d.b);
   assert.ok(Math.abs(va.x * vb.x + va.y * vb.y) < 1e-6); // perpendicular
   assert.equal(crosshairBandsDiagonal.length, 3); // still no angle parameter
+});
+
+test('crosshairOutline: 12-point plus outline, axis-aligned and 45°', () => {
+  const o = crosshairOutline({ x: 10, y: 20 }, 4, 100, false);
+  assert.equal(o.length, 12);
+  assert.deepEqual(o[0], { x: 10 - 50, y: 20 - 2 });
+  assert.deepEqual(o[2], { x: 10 - 2, y: 20 - 50 });
+  const d = crosshairOutline({ x: 10, y: 20 }, 4, 100, true);
+  assert.equal(d.length, 12);
+  // every vertex keeps its distance from the centre under the 45° turn
+  o.forEach((p, i) => {
+    assert.ok(Math.abs(Math.hypot(p.x - 10, p.y - 20) - Math.hypot(d[i].x - 10, d[i].y - 20)) < 1e-9);
+  });
+  // the first edge (along the old x axis) now runs along a diagonal
+  assert.ok(Math.abs((d[1].x - d[0].x) - (d[1].y - d[0].y)) < 1e-9);
 });

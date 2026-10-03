@@ -153,3 +153,20 @@ export function crosshairBandsDiagonal(center, thicknessPx, spanPx) {
   }
   return { thickness: thicknessPx, a: band(1, 1), b: band(1, -1) };
 }
+
+// The outer edge of the whole crosshair as ONE closed 12-point polygon (the
+// union outline of the two bands, so no line is drawn across the middle where
+// they overlap). Used by the shell to stroke a red edge. `diagonal` is the
+// same fixed 45° "×" state as crosshairBandsDiagonal — a boolean, not an angle.
+export function crosshairOutline(center, thicknessPx, spanPx, diagonal) {
+  const h = thicknessPx / 2;
+  const s = spanPx / 2;
+  const plus = [
+    [-s, -h], [-h, -h], [-h, -s], [h, -s], [h, -h], [s, -h],
+    [s, h], [h, h], [h, s], [-h, s], [-h, h], [-s, h],
+  ];
+  const k = Math.SQRT1_2;
+  return plus.map(([x, y]) => (diagonal
+    ? { x: center.x + (x - y) * k, y: center.y + (x + y) * k }
+    : { x: center.x + x, y: center.y + y }));
+}

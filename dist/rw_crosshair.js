@@ -156,7 +156,24 @@ function crosshairBandsDiagonal(center, thicknessPx, spanPx) {
   return { thickness: thicknessPx, a: band(1, 1), b: band(1, -1) };
 }
 
-return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal};
+// The outer edge of the whole crosshair as ONE closed 12-point polygon (the
+// union outline of the two bands, so no line is drawn across the middle where
+// they overlap). Used by the shell to stroke a red edge. `diagonal` is the
+// same fixed 45° "×" state as crosshairBandsDiagonal — a boolean, not an angle.
+function crosshairOutline(center, thicknessPx, spanPx, diagonal) {
+  const h = thicknessPx / 2;
+  const s = spanPx / 2;
+  const plus = [
+    [-s, -h], [-h, -h], [-h, -s], [h, -s], [h, -h], [s, -h],
+    [s, h], [h, h], [h, s], [-h, s], [-h, h], [-s, h],
+  ];
+  const k = Math.SQRT1_2;
+  return plus.map(([x, y]) => (diagonal
+    ? { x: center.x + (x - y) * k, y: center.y + (x + y) * k }
+    : { x: center.x + x, y: center.y + y }));
+}
+
+return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal, crosshairOutline};
 })();
 
 // ===== src/console/shell.js =====
@@ -192,7 +209,7 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   // mechanism) — shell.js is appended verbatim, so it must pull these out
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
-    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal,
+    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal, crosshairOutline,
   } = __m_geom;
 
   function status(msg) {
@@ -323,6 +340,17 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
       ctx.fillRect(bands.horizontal.x, bands.horizontal.y, bands.horizontal.width, bands.horizontal.height);
       ctx.fillRect(bands.vertical.x, bands.vertical.y, bands.vertical.width, bands.vertical.height);
     }
+    // Opaque red edge around the whole crosshair (one outline of the union,
+    // so nothing is drawn across the centre) — easy to spot against the sheet
+    // even though the fill is only 20% opaque.
+    const outline = crosshairOutline(centerCanvas, widthCanvasPx, spanPx, diagonal);
+    ctx.beginPath();
+    ctx.moveTo(outline[0].x, outline[0].y);
+    for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i].x, outline[i].y);
+    ctx.closePath();
+    ctx.strokeStyle = '#e11d1d';
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.stroke();
     ctx.restore();
   }
 

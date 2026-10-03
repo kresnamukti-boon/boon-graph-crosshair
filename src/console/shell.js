@@ -30,7 +30,7 @@
   // mechanism) — shell.js is appended verbatim, so it must pull these out
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
-    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal,
+    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal, crosshairOutline,
   } = __m_geom;
 
   function status(msg) {
@@ -161,6 +161,17 @@
       ctx.fillRect(bands.horizontal.x, bands.horizontal.y, bands.horizontal.width, bands.horizontal.height);
       ctx.fillRect(bands.vertical.x, bands.vertical.y, bands.vertical.width, bands.vertical.height);
     }
+    // Opaque red edge around the whole crosshair (one outline of the union,
+    // so nothing is drawn across the centre) — easy to spot against the sheet
+    // even though the fill is only 20% opaque.
+    const outline = crosshairOutline(centerCanvas, widthCanvasPx, spanPx, diagonal);
+    ctx.beginPath();
+    ctx.moveTo(outline[0].x, outline[0].y);
+    for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i].x, outline[i].y);
+    ctx.closePath();
+    ctx.strokeStyle = '#e11d1d';
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.stroke();
     ctx.restore();
   }
 

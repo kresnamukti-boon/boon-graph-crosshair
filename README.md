@@ -25,6 +25,9 @@ A small draggable panel (default bottom-centre; drag the ☰ grip to move it, po
 leaving the drawing tool) and **Width: Duct/5px** (switch the bands to a 5px-thick
 crosshair, which also works when no duct size is set). Ctrl-tap rotation applies to both widths.
 
+The whole crosshair also has an opaque red outline (one closed edge around the union of the two
+bands, nothing drawn across the centre), so it's easy to spot even though the fill is 20% opacity.
+
 ## Injection
 
 F12 → Console → paste `console_loader.js` in full → Enter. Paste again after each page

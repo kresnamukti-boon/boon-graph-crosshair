@@ -134,7 +134,8 @@ function makeCanvasContext() {
   return {
     _calls: calls,
     clearRect() { calls.push({ op: 'clearRect' }); },
-    beginPath() {}, closePath() {}, stroke() {},
+    beginPath() {}, closePath() {},
+    stroke() { calls.push({ op: 'stroke', style: this.strokeStyle }); },
     moveTo(x, y) { calls.push({ op: 'moveTo', x, y }); },
     lineTo(x, y) { calls.push({ op: 'lineTo', x, y }); },
     fill() { calls.push({ op: 'fill' }); },
@@ -543,6 +544,21 @@ function loadModule(win) {
     onBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
     ok(win.__RW._crosshairState() !== null, 'drawing again after switching back on');
+  }
+
+  /* ---- 13a. red edge: one red stroke per frame, in both orientations ---- */
+  {
+    const { win, byId, raf } = makeStubWindow();
+    makeGraphLayers(byId);
+    win.__graphDebug = makeGraphDebug();
+    loadModule(win);
+    raf.runOneFrame();
+    const ctx = byId['rw-crosshair-layer'].getContext('2d');
+    const strokes = () => ctx._calls.filter((c) => c.op === 'stroke');
+    ok(strokes().length === 1 && /^#e11d1d$/i.test(strokes()[0].style), 'one red outline stroke per frame');
+    win.__RW._crosshairDiagonal = true;
+    raf.runOneFrame();
+    ok(strokes().length === 2, 'the diagonal state is outlined too');
   }
 
   /* ---- 13b. panel is draggable via its grip ---- */
