@@ -131,13 +131,14 @@ function makeElement(tag, byId) {
 // function has no angle parameter to misuse.
 function makeCanvasContext() {
   const calls = [];
+  let path = [];
   return {
     _calls: calls,
     clearRect() { calls.push({ op: 'clearRect' }); },
-    beginPath() {}, closePath() {},
-    stroke() { calls.push({ op: 'stroke', style: this.strokeStyle }); },
-    moveTo(x, y) { calls.push({ op: 'moveTo', x, y }); },
-    lineTo(x, y) { calls.push({ op: 'lineTo', x, y }); },
+    beginPath() { path = []; }, closePath() {},
+    stroke() { calls.push({ op: 'stroke', style: this.strokeStyle, lineWidth: this.lineWidth, pts: path.slice() }); },
+    moveTo(x, y) { path.push({ x, y }); },
+    lineTo(x, y) { path.push({ x, y }); },
     fill() { calls.push({ op: 'fill' }); },
     save() {}, restore() {}, arc() {},
     fillRect(x, y, width, height) { calls.push({ op: 'fillRect', x, y, width, height }); },
@@ -413,21 +414,21 @@ function loadModule(win) {
     raf.runOneFrame();
     ok(win.__RW._crosshairState() !== null, 'sanity: drawing while enabled');
     const ctx = byId['rw-crosshair-layer'].getContext('2d');
-    const fillCountWhileEnabled = ctx._calls.filter((c) => c.op === 'fillRect').length;
-    ok(fillCountWhileEnabled === 2, 'sanity: exactly 2 band fills happened while enabled');
+    const fillCountWhileEnabled = ctx._calls.filter((c) => c.op === 'stroke').length;
+    ok(fillCountWhileEnabled === 1, 'sanity: exactly 1 outline stroke happened while enabled');
 
     win.__RW._crosshairEnabled = false;
     raf.runOneFrame();
-    const fillCountAfterDisable = ctx._calls.filter((c) => c.op === 'fillRect').length;
-    ok(fillCountAfterDisable === fillCountWhileEnabled, 'no new band is drawn on the tick after disabling');
+    const fillCountAfterDisable = ctx._calls.filter((c) => c.op === 'stroke').length;
+    ok(fillCountAfterDisable === fillCountWhileEnabled, 'no new outline is drawn on the tick after disabling');
     ok(ctx._calls.some((c) => c.op === 'clearRect'), 'the overlay is cleared instead');
     ok(win.__RW._crosshairState() === null, 'the debug hatch reports null too, not a stale last-drawn snapshot');
   }
 
-  /* ---- 11. never rotates: no translate/rotate call is EVER made, and both fillRect calls are plain axis-aligned rectangles matching the duct width ---- */
+  /* ---- 11. never rotates: no translate/rotate call is EVER made; ONE red 15px outline stroke, no fill, matching the duct width ---- */
   {
     const { win, byId, raf } = makeStubWindow();
-    const { stage } = makeGraphLayers(byId);
+    makeGraphLayers(byId);
     win.__graphDebug = makeGraphDebug();
     loadModule(win);
     raf.runOneFrame();
@@ -435,20 +436,18 @@ function loadModule(win) {
     const overlay = byId['rw-crosshair-layer'];
     ok(!!overlay, 'the overlay canvas was created');
     const ctx = overlay.getContext('2d');
-    const rotateOrTranslateCalls = ctx._calls.filter((c) => c.op === 'translate' || c.op === 'rotate');
-    ok(rotateOrTranslateCalls.length === 0, 'no translate/rotate call was ever made — the crosshair never rotates');
-    const fillRectCalls = ctx._calls.filter((c) => c.op === 'fillRect');
-    ok(fillRectCalls.length === 2, 'exactly two fillRect calls (the horizontal and vertical band)');
-    // dpr defaults to 1 in this fixture, so canvas px == CSS px: widthCanvasPx
-    // should be 50 (same math as test 4), matching one call's thickness on
-    // its thin axis (height for the horizontal band, width for the vertical
-    // one) — this is a genuinely independent check from RW._crosshairState(),
-    // reading what was actually handed to the canvas API.
-    const horizontal = fillRectCalls.find((c) => c.width > c.height);
-    const vertical = fillRectCalls.find((c) => c.height > c.width);
-    ok(!!horizontal && !!vertical, 'one call is wide+short (horizontal band), the other tall+narrow (vertical band)');
-    ok(Math.abs(horizontal.height - 50) < 1e-6, `horizontal band thickness matches the duct width (got ${horizontal && horizontal.height})`);
-    ok(Math.abs(vertical.width - 50) < 1e-6, `vertical band thickness matches the duct width (got ${vertical && vertical.width})`);
+    ok(ctx._calls.filter((c) => c.op === 'translate' || c.op === 'rotate').length === 0, 'no translate/rotate call was ever made — the crosshair never rotates');
+    ok(ctx._calls.filter((c) => c.op === 'fillRect' || c.op === 'fill').length === 0, 'nothing is filled — red edge only');
+    const strokes = ctx._calls.filter((c) => c.op === 'stroke');
+    ok(strokes.length === 1, 'exactly one outline stroke');
+    ok(strokes[0].lineWidth === 15, `the edge line is 15px thick (got ${strokes[0].lineWidth})`);
+    ok(/^#e11d1d$/i.test(strokes[0].style), 'the edge is red');
+    const pts = strokes[0].pts;
+    ok(pts.length === 12, 'one 12-point union outline');
+    // dpr is 1, so canvas px == CSS px: the arm width (pts[0] -> pts[11] on
+    // the y axis) is the duct width, 50 (same math as test 4) — read off what
+    // was actually handed to the canvas API.
+    ok(Math.abs((pts[11].y - pts[0].y) - 50) < 1e-6 && pts[0].x === pts[11].x - 0, `outline arm width matches the duct width (got ${pts[11].y - pts[0].y})`);
   }
 
   /* ---- 12. bare Ctrl tap toggles the "×" (45°) state and back; modifiers/other input in between do not ---- */
@@ -475,13 +474,16 @@ function loadModule(win) {
       tap();
       raf.runOneFrame();
       ok(win.__RW._crosshairState().diagonal === true, 'a bare Ctrl tap switches to diagonal');
-      ok(count('fillRect') === 2, 'no new fillRect while diagonal');
-      ok(count('fill') === 2, 'two polygon fills while diagonal');
+      ok(count('stroke') === 2, 'one more outline stroke while diagonal');
+      const dp = ctx._calls.filter((c) => c.op === 'stroke').pop().pts;
+      ok(Math.abs((dp[1].x - dp[0].x) - (dp[1].y - dp[0].y)) < 1e-6, 'the diagonal outline\'s first edge runs at 45°');
       ok(ctx._calls.filter((c) => c.op === 'translate' || c.op === 'rotate').length === 0, 'diagonal mode still never calls translate/rotate');
       tap();
       raf.runOneFrame();
       ok(win.__RW._crosshairState().diagonal === false, 'a second tap returns to axis-aligned');
-      ok(count('fillRect') === 4, 'fillRect bands are drawn again');
+      ok(count('stroke') === 3, 'drawn again after toggling back');
+      const ap = ctx._calls.filter((c) => c.op === 'stroke').pop().pts;
+      ok(ap[0].y === ap[1].y, 'axis-aligned outline again (first edge horizontal)');
     }
     {
       const { win, tap } = setup();
@@ -523,18 +525,19 @@ function loadModule(win) {
     ok(!!onBtn && !!thinBtn, 'both panel buttons exist');
     ok(onBtn.textContent === 'Crosshair: On' && thinBtn.textContent === 'Width: Duct', 'initial labels');
     const ctx = byId['rw-crosshair-layer'].getContext('2d');
-    const fills = () => ctx._calls.filter((c) => c.op === 'fillRect');
+    const fills = () => ctx._calls.filter((c) => c.op === 'stroke');
 
     thinBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
     ok(thinBtn.textContent === 'Width: 5px', 'thin label flips');
     ok(win.__RW._crosshairState().thin === true, 'state reports thin');
-    const last2 = fills().slice(-2);
-    ok(last2.some((c) => c.height === 5) && last2.some((c) => c.width === 5), 'both bands are 5px thick');
+    const tp = fills().pop().pts;
+    ok(Math.abs((tp[11].y - tp[0].y) - 5) < 1e-6, `arms are 5px wide in thin mode (got ${tp[11].y - tp[0].y})`);
 
     thinBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
-    ok(Math.abs(fills().slice(-2).find((c) => c.width > c.height).height - 50) < 1e-6, 'back to duct width');
+    const bp = fills().pop().pts;
+    ok(Math.abs((bp[11].y - bp[0].y) - 50) < 1e-6, 'back to duct width');
 
     onBtn.dispatchEvent({ type: 'click' });
     const before = fills().length;

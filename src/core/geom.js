@@ -90,74 +90,21 @@ export function ductWidthCssPx(widthInches, cssPxPerFoot) {
   return Number.isFinite(px) && px > 0 ? px : null;
 }
 
-// The crosshair itself: two perpendicular BANDS (thick lines, not hairlines)
-// crossing at `center` (whatever pixel space the caller is drawing in — CSS
-// or canvas-backing — as long as thicknessPx/spanPx are in the same space).
-// Each band is `thicknessPx` thick (the duct's own true on-screen width) and
-// `spanPx` long, centered on `center` — `spanPx` is the CALLER's job to make
-// large enough (e.g. the overlay canvas's own diagonal, doubled) that both
-// bands visibly run off every edge of the canvas, reading as a full
-// alignment guide rather than a small mark at the cursor (Kresna's own
-// correction: "a solid crosshair expanding beyond the canvas with the width
-// of the duct", replacing an earlier round's small width-length tick-mark
-// crosshair).
+// The crosshair is drawn as ONE closed outline (below) of two perpendicular
+// bands crossing at `center` (any pixel space, as long as thicknessPx/spanPx
+// match it). `thicknessPx` is the duct's own true on-screen width; `spanPx` is
+// the CALLER's job to make large enough (e.g. twice the overlay canvas's own
+// diagonal) that both arms run off every edge of the canvas, reading as a
+// full alignment guide rather than a mark at the cursor.
 //
-// Deliberately ALWAYS screen-axis-aligned, with no angle input at all
-// (Kresna's own explicit follow-up correction: "make sure it doesnt rotate
-// relative to the duct", removing an even earlier round's attempt to rotate
-// the crosshair to the duct's own travel direction). Not just "the caller
-// happens to not pass an angle" — there is no angle parameter to this
-// function any more, so a future caller can't accidentally reintroduce
-// rotation by passing one. Returns each band as a ready-to-fill rectangle
-// (`{x, y, width, height}`, top-left + size — exactly `ctx.fillRect`'s own
-// argument order) rather than a center+angle descriptor, since axis-aligned
-// rectangles need no `ctx.translate`/`ctx.rotate` at all.
-//
-// `crosshairBandsDiagonal` below is the ONE other fixed orientation (Kresna's
-// round-4 ask: tap Ctrl to turn the "+" into an "×"). It too takes no angle —
-// only ever ±45° from the screen axes — so it is a user-toggled second state,
-// never duct-following rotation.
-export function crosshairBands(center, thicknessPx, spanPx) {
-  const halfThickness = thicknessPx / 2;
-  const halfSpan = spanPx / 2;
-  return {
-    thickness: thicknessPx,
-    horizontal: {
-      x: center.x - halfSpan, y: center.y - halfThickness,
-      width: spanPx, height: thicknessPx,
-    },
-    vertical: {
-      x: center.x - halfThickness, y: center.y - halfSpan,
-      width: thicknessPx, height: spanPx,
-    },
-  };
-}
-
-// The same two bands as crosshairBands, turned 45° (an "×"). Each band is a
-// rotated rectangle returned as 4 corner points (in drawing order) ready for
-// beginPath/moveTo/lineTo/closePath/fill — no ctx.translate/rotate needed.
-// `a` runs along the 45° diagonal (down-right), `b` along 135° (down-left).
-// `thicknessPx` is measured perpendicular to each band's own length.
-export function crosshairBandsDiagonal(center, thicknessPx, spanPx) {
-  const h = thicknessPx / 2;
-  const s = spanPx / 2;
-  const k = Math.SQRT1_2;
-  function band(ux, uy) {
-    const px = -uy;
-    const py = ux;
-    const at = (along, across) => ({
-      x: center.x + ux * along * k + px * across * k,
-      y: center.y + uy * along * k + py * across * k,
-    });
-    return [at(-s, -h), at(s, -h), at(s, h), at(-s, h)];
-  }
-  return { thickness: thicknessPx, a: band(1, 1), b: band(1, -1) };
-}
-
+// Deliberately NEVER follows the duct's travel direction (Kresna's round-3
+// correction: "make sure it doesnt rotate relative to the duct"): there is no
+// angle parameter anywhere, only a boolean for the one user-toggled fixed
+// 45° "×" state (round 4).
 // The outer edge of the whole crosshair as ONE closed 12-point polygon (the
 // union outline of the two bands, so no line is drawn across the middle where
-// they overlap). Used by the shell to stroke a red edge. `diagonal` is the
-// same fixed 45° "×" state as crosshairBandsDiagonal — a boolean, not an angle.
+// they overlap). Used by the shell to stroke the red edge. `diagonal` turns
+// the whole shape a fixed 45° ("×") — a boolean, not an angle.
 export function crosshairOutline(center, thicknessPx, spanPx, diagonal) {
   const h = thicknessPx / 2;
   const s = spanPx / 2;

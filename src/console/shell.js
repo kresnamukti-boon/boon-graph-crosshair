@@ -30,7 +30,7 @@
   // mechanism) — shell.js is appended verbatim, so it must pull these out
   // itself, the same way boon-assembly-duplicate's own shell.js does.
   const {
-    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal, crosshairOutline,
+    cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairOutline,
   } = __m_geom;
 
   function status(msg) {
@@ -45,6 +45,8 @@
   // very first click of a run, not just mid-draw.
   // Thickness (CSS px) of the panel's thin mode.
   const THIN_PX = 5;
+  // Thickness (CSS px) of the red edge line itself.
+  const EDGE_PX = 15;
   const DRAWING_TOOLS = ['route', 'flex', 'extend', 'transition', 'branch'];
 
   // ----- overlay layer -----
@@ -138,39 +140,20 @@
 
     const ctx = overlayCtx;
     ctx.save();
-    // 20% opacity (Kresna's own request) — reads as a light tint over the
-    // drawing rather than an opaque bar, so the PDF linework underneath
-    // stays visible through it. Distinct hue from native's own orange/teal
-    // cursor crosshair (#F36C3D drawing, #1597A7 selecting) so the two are
-    // never confused. Screen-axis-aligned rectangles (see crosshairBands's
-    // own header) — no rotation, no translate/rotate needed.
-    ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-    if (diagonal) {
-      // Ctrl-toggled "×" state: two 45° polygons, filled as one path per band
-      // (still no ctx.translate/rotate).
-      const d = crosshairBandsDiagonal(centerCanvas, widthCanvasPx, spanPx);
-      [d.a, d.b].forEach((pts) => {
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.closePath();
-        ctx.fill();
-      });
-    } else {
-      const bands = crosshairBands(centerCanvas, widthCanvasPx, spanPx);
-      ctx.fillRect(bands.horizontal.x, bands.horizontal.y, bands.horizontal.width, bands.horizontal.height);
-      ctx.fillRect(bands.vertical.x, bands.vertical.y, bands.vertical.width, bands.vertical.height);
-    }
-    // Opaque red edge around the whole crosshair (one outline of the union,
-    // so nothing is drawn across the centre) — easy to spot against the sheet
-    // even though the fill is only 20% opaque.
+    // Red edge only, no fill (Kresna's call after trying the translucent fill
+    // + thin red edge): one closed outline of the union of the two bands, so
+    // nothing is drawn across the centre. The line is EDGE_PX thick and
+    // centred on the true band edge, so the duct's real edge runs through the
+    // middle of the red. Plain path stroke in both the "+" and "×" states —
+    // no ctx.translate/rotate.
     const outline = crosshairOutline(centerCanvas, widthCanvasPx, spanPx, diagonal);
     ctx.beginPath();
     ctx.moveTo(outline[0].x, outline[0].y);
     for (let i = 1; i < outline.length; i++) ctx.lineTo(outline[i].x, outline[i].y);
     ctx.closePath();
     ctx.strokeStyle = '#e11d1d';
-    ctx.lineWidth = Math.max(1, dpr);
+    ctx.lineWidth = EDGE_PX * dpr;
+    ctx.lineJoin = 'miter';
     ctx.stroke();
     ctx.restore();
   }

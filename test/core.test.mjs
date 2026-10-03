@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   spatialToFramePx, framePxToClientPoint, spatialToClientPoint,
-  cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairBands, crosshairBandsDiagonal, crosshairOutline,
+  cssPxPerFootAt, ductWidthInches, ductWidthCssPx, crosshairOutline,
 } from '../src/core/geom.js';
 
 // An identity-ish transform: origin at world (0,0), x/y axes span 10 world
@@ -99,56 +99,6 @@ test('ductWidthCssPx returns null for invalid width or scale', () => {
   assert.equal(ductWidthCssPx(12, null), null);
 });
 
-test('crosshairBands: the horizontal band is thicknessPx tall, spanPx wide, centered on the point', () => {
-  const bands = crosshairBands({ x: 100, y: 100 }, 20, 5000);
-  assert.equal(bands.thickness, 20);
-  assert.deepEqual(bands.horizontal, { x: 100 - 2500, y: 100 - 10, width: 5000, height: 20 });
-});
-
-test('crosshairBands: the vertical band is thicknessPx wide, spanPx tall, centered on the point', () => {
-  const bands = crosshairBands({ x: 100, y: 100 }, 20, 5000);
-  assert.deepEqual(bands.vertical, { x: 100 - 10, y: 100 - 2500, width: 20, height: 5000 });
-});
-
-test('crosshairBands: both bands are centered on the given point regardless of thickness/span', () => {
-  for (const [thickness, span] of [[8, 200], [33, 10000], [1, 4]]) {
-    const bands = crosshairBands({ x: -12, y: 7 }, thickness, span);
-    const hCenterX = bands.horizontal.x + bands.horizontal.width / 2;
-    const hCenterY = bands.horizontal.y + bands.horizontal.height / 2;
-    const vCenterX = bands.vertical.x + bands.vertical.width / 2;
-    const vCenterY = bands.vertical.y + bands.vertical.height / 2;
-    assert.ok(Math.abs(hCenterX - -12) < 1e-9 && Math.abs(hCenterY - 7) < 1e-9);
-    assert.ok(Math.abs(vCenterX - -12) < 1e-9 && Math.abs(vCenterY - 7) < 1e-9);
-  }
-});
-
-test('crosshairBands: has no angle/rotation input at all — always screen-axis-aligned', () => {
-  // Kresna's own explicit correction ("make sure it doesnt rotate relative
-  // to the duct"): the function signature itself has no angle parameter, so
-  // there's nothing for a caller to pass that would rotate either band.
-  assert.equal(crosshairBands.length, 3); // (center, thicknessPx, spanPx) only
-});
-
-test('crosshairBandsDiagonal: two perpendicular 45° bands, spanPx long, thicknessPx thick, centered on the point', () => {
-  const d = crosshairBandsDiagonal({ x: 100, y: 50 }, 20, 1000);
-  const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
-  const dir = (pts) => ({ x: pts[1].x - pts[0].x, y: pts[1].y - pts[0].y });
-  for (const pts of [d.a, d.b]) {
-    assert.equal(pts.length, 4);
-    assert.ok(Math.abs(dist(pts[0], pts[1]) - 1000) < 1e-9);
-    assert.ok(Math.abs(dist(pts[1], pts[2]) - 20) < 1e-9);
-    const cx = pts.reduce((s, p) => s + p.x, 0) / 4;
-    const cy = pts.reduce((s, p) => s + p.y, 0) / 4;
-    assert.ok(Math.abs(cx - 100) < 1e-9 && Math.abs(cy - 50) < 1e-9);
-    const v = dir(pts);
-    assert.ok(Math.abs(Math.abs(v.x) - Math.abs(v.y)) < 1e-9); // exactly 45° off-axis
-  }
-  const va = dir(d.a);
-  const vb = dir(d.b);
-  assert.ok(Math.abs(va.x * vb.x + va.y * vb.y) < 1e-6); // perpendicular
-  assert.equal(crosshairBandsDiagonal.length, 3); // still no angle parameter
-});
-
 test('crosshairOutline: 12-point plus outline, axis-aligned and 45°', () => {
   const o = crosshairOutline({ x: 10, y: 20 }, 4, 100, false);
   assert.equal(o.length, 12);
@@ -162,4 +112,8 @@ test('crosshairOutline: 12-point plus outline, axis-aligned and 45°', () => {
   });
   // the first edge (along the old x axis) now runs along a diagonal
   assert.ok(Math.abs((d[1].x - d[0].x) - (d[1].y - d[0].y)) < 1e-9);
+});
+
+test('crosshairOutline: has no angle parameter — only a diagonal flag', () => {
+  assert.equal(crosshairOutline.length, 4); // (center, thicknessPx, spanPx, diagonal)
 });

@@ -5,10 +5,10 @@ A console-injected (paste-into-DevTools) add-on for the Constructions Tagger **g
 `boon-assembly-duplicate` / etc under `~/Projects/boon-projects/`.
 
 Whenever a duct-drawing tool is active (route, flex, extend, transition, or branch), it draws a
-translucent crosshair at the cursor — two long bands crossing there, each running well past every
+crosshair at the cursor — two long bands crossing there, each running well past every
 edge of the visible canvas (not just a short mark at the cursor), each exactly as thick as the
 current duct's own real plan width (rectangular `width_in`, or `diameter_in` for round) in
-on-screen pixels, at 20% opacity so the PDF underneath stays visible. Instead of eyeballing a
+on-screen pixels, shown as an unfilled red outline so the PDF underneath stays fully visible. Instead of eyeballing a
 corner against the two duct edges already drawn on the PDF, you can line the band up against them
 anywhere along its length — including well away from the cursor, e.g. against another duct run
 elsewhere on the sheet. The crosshair never rotates to match the duct's own travel direction —
@@ -25,8 +25,9 @@ A small draggable panel (default bottom-centre; drag the ☰ grip to move it, po
 leaving the drawing tool) and **Width: Duct/5px** (switch the bands to a 5px-thick
 crosshair, which also works when no duct size is set). Ctrl-tap rotation applies to both widths.
 
-The whole crosshair also has an opaque red outline (one closed edge around the union of the two
-bands, nothing drawn across the centre), so it's easy to spot even though the fill is 20% opacity.
+The crosshair is drawn as a **red edge only** — no fill — a 15px-thick red line tracing one closed
+outline around the two bands (nothing drawn across the centre). The duct's true edge runs through
+the middle of the red line.
 
 ## Injection
 
