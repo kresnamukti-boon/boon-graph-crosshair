@@ -545,6 +545,25 @@ function loadModule(win) {
     ok(win.__RW._crosshairState() !== null, 'drawing again after switching back on');
   }
 
+  /* ---- 13b. panel is draggable via its grip ---- */
+  {
+    const { win, byId, raf } = makeStubWindow();
+    makeGraphLayers(byId);
+    win.__graphDebug = makeGraphDebug();
+    loadModule(win);
+    raf.runOneFrame();
+    const grip = byId['rw-crosshair-grip'];
+    const panel = byId['rw-crosshair-panel'];
+    ok(!!grip && !!panel, 'grip and panel exist');
+    panel._rect = { left: 100, top: 100, width: 200, height: 24, right: 300, bottom: 124 };
+    grip.dispatchEvent({ type: 'pointerdown', clientX: 110, clientY: 110, preventDefault() {} });
+    win.dispatchEvent({ type: 'pointermove', clientX: 410, clientY: 310 });
+    ok(panel.style.left === '400px' && panel.style.top === '300px', `panel follows the drag (got ${panel.style.left},${panel.style.top})`);
+    win.dispatchEvent({ type: 'pointerup' });
+    win.dispatchEvent({ type: 'pointermove', clientX: 0, clientY: 0 });
+    ok(panel.style.left === '400px', 'no movement after release');
+  }
+
   /* ---- 14. thin mode needs no duct width ---- */
   {
     const { win, byId, raf } = makeStubWindow();

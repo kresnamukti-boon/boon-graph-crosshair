@@ -341,13 +341,64 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
     panelEl.appendChild(b);
     return b;
   }
+  // Draggable (grip on the left) because the native toolbar layout isn't
+  // reachable from here — the user moves it off whatever it covers. Position
+  // is remembered in localStorage (best effort, never required).
+  const POS_KEY = 'rw_crosshair_panel_pos';
+  function loadPos() {
+    try {
+      const v = JSON.parse(window.localStorage.getItem(POS_KEY));
+      if (v && Number.isFinite(v.left) && Number.isFinite(v.top)) return v;
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+  function savePos(left, top) {
+    try { window.localStorage.setItem(POS_KEY, JSON.stringify({ left: left, top: top })); } catch (e) { /* ignore */ }
+  }
+  function placePanel(left, top) {
+    const vw = window.innerWidth || 1000;
+    const vh = window.innerHeight || 800;
+    const l = Math.min(Math.max(0, left), Math.max(0, vw - 40));
+    const t = Math.min(Math.max(0, top), Math.max(0, vh - 24));
+    panelEl.style.left = l + 'px';
+    panelEl.style.top = t + 'px';
+    panelEl.style.bottom = 'auto';
+    return { left: l, top: t };
+  }
+  function makeGrip() {
+    const g = document.createElement('div');
+    g.id = 'rw-crosshair-grip';
+    g.textContent = '\u2630';
+    g.style.cssText = 'font:12px system-ui,sans-serif;padding:4px 6px;cursor:move;user-select:none;'
+      + 'border:1px solid #06b6d4;border-radius:4px;background:#fff;color:#0e7490;';
+    let drag = null;
+    g.addEventListener('pointerdown', function (e) {
+      const r = panelEl.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      e.preventDefault();
+    });
+    window.addEventListener('pointermove', function (e) {
+      if (drag) placePanel(e.clientX - drag.dx, e.clientY - drag.dy);
+    });
+    window.addEventListener('pointerup', function () {
+      if (!drag) return;
+      drag = null;
+      const r = panelEl.getBoundingClientRect();
+      savePos(r.left, r.top);
+    });
+    panelEl.appendChild(g);
+  }
   function ensurePanel() {
     if (panelEl && panelEl.isConnected) return;
     panelEl = document.createElement('div');
     panelEl.id = 'rw-crosshair-panel';
-    panelEl.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483001;'
-      + 'display:flex;gap:6px;';
+    panelEl.style.cssText = 'position:fixed;z-index:2147483001;display:flex;gap:6px;';
     document.body.appendChild(panelEl);
+    // Default: bottom-centre; a saved position (if any) wins.
+    const saved = loadPos();
+    if (saved) placePanel(saved.left, saved.top);
+    else { panelEl.style.left = '50%'; panelEl.style.bottom = '12px'; }
+    makeGrip();
     enabledBtn = null; thinBtn = null;
     enabledBtn = makeButton(function () { RW._crosshairEnabled = RW._crosshairEnabled === false; });
     thinBtn = makeButton(function () { RW._crosshairThin = !RW._crosshairThin; });
@@ -415,5 +466,5 @@ return {spatialToFramePx, framePxToClientPoint, spatialToClientPoint, cssPxPerFo
   if (RW._crosshairEnabled === undefined) RW._crosshairEnabled = true;
   RW._crosshairState = function () { return RW._crosshairLastState || null; };
 
-  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°; panel buttons bottom-left for on/off and 1px)');
+  status('crosshair ready — draws a duct-width crosshair at the cursor whenever a duct-drawing tool is active (tap Ctrl to toggle 45°; draggable panel for on/off and 1px)');
 })()

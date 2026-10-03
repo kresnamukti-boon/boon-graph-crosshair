@@ -21,7 +21,7 @@ on the same page, **in either paste order** (confirmed live pasted alongside `bo
 shared `window.__RW` namespace, no field collisions). Read-only: never clicks, drags, or mutates
 any annotation state — only reads `window.__graphDebug`'s existing read-only getters.
 
-A small panel at the bottom-left has two buttons: **Crosshair: On/Off** (hide/show it without
+A small draggable panel (default bottom-centre; drag the ☰ grip to move it, position is remembered) has two buttons: **Crosshair: On/Off** (hide/show it without
 leaving the drawing tool) and **Width: Duct/1px** (switch the bands to a 1px-thick hairline
 crosshair, which also works when no duct size is set). Ctrl-tap rotation applies to both widths.
 
