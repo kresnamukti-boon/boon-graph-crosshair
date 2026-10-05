@@ -1,8 +1,8 @@
 # Boon Crosshair
 
 A console-injected (paste-into-DevTools) add-on for the Constructions Tagger **graph**
-("Duct Takeoff") duct editor, sibling to `boon-command-line` / `boon-duct-workbench` /
-`boon-assembly-duplicate` / etc under `~/Projects/boon-projects/`.
+("Duct Takeoff") duct editor. Handing it to an engineer to port natively? Read
+[PORTING.md](PORTING.md) first.
 
 Whenever a duct-drawing tool is active (route, flex, extend, transition, or branch), it draws a
 crosshair at the cursor — two long bands crossing there, each running well past every
@@ -16,9 +16,9 @@ it has exactly two fixed orientations: "+" (screen-axis-aligned, the default) an
 **Tap Ctrl** (press and release with nothing in between) to switch to "×"; tap again to return to
 "+". Ctrl+wheel zoom, Ctrl+Z/Y/D/A and Ctrl+click are unaffected and never toggle it.
 
-Fully standalone — no coupling to any sibling RW-family add-on, works with or without them pasted
-on the same page, **in either paste order** (confirmed live pasted alongside `boon-command-line`:
-shared `window.__RW` namespace, no field collisions). Read-only: never clicks, drags, or mutates
+Fully standalone — no coupling to any other add-on. Confirmed live when pasted after
+[boon-tagger-commandline](https://github.com/kresnamukti-boon/boon-tagger-commandline) (shared
+`window.__RW` namespace, no field collisions); the reverse paste order hasn't been tried. Read-only: never clicks, drags, or mutates
 any annotation state — only reads `window.__graphDebug`'s existing read-only getters.
 
 A small draggable panel (default bottom-centre; drag the ☰ grip to move it, position is remembered) has two buttons: **Crosshair: On/Off** (hide/show it without
@@ -55,7 +55,7 @@ scripts/build-dist.js    bundles src/core/*.js + shell.js into dist/rw_crosshair
 build_loader.sh          wraps dist/rw_crosshair.js into console_loader.js (ready-gated, node --checked)
 ```
 
-Rebuild after editing `src/`: `bash build_loader.sh`. Verify: `node --test test/` (pure core),
+Rebuild after editing `src/`: `bash build_loader.sh`. Verify: `node --test "test/*.test.mjs"` (pure core + purity check),
 `node verify_crosshair.js` (DOM-stub harness against the built `dist/`).
 
 ## Boundaries
@@ -65,7 +65,6 @@ Rebuild after editing `src/`: `bash build_loader.sh`. Verify: `node --test test/
   drawn inside a scaled sub-region will size the crosshair off the page-wide scale instead of the
   region's own (native itself would use the region's scale here — not reachable from
   `window.__graphDebug`).
-- No teardown/uninstall function — reload the page to remove it, same as every sibling add-on in
-  this family.
+- No teardown/uninstall function — reload the page to remove it.
 - **Confirmed live in a real, focused session.** Kresna pasted this on the real page and confirmed
   seeing the crosshair render.
