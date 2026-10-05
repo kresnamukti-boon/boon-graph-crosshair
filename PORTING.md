@@ -5,7 +5,7 @@
 - Code: https://github.com/kresnamukti-boon/boon-graph-crosshair. Port from `master`.
 - Today it's pasted into DevTools. Natively it extends the existing duct-width guide circle in `drawCursorOverlayImmediate()`. It isn't a new system.
 
-Native file: `graph-session-entry.js` (project_graph). Line numbers drift, so search by function name. Everything below was checked against a local copy dated 2026-09-25.
+Native file: `graph-session-entry.js` (project_graph). Line numbers drift, so search by function name. Native references in §2, §3, §8 and Decision A were checked against constructions-tagger main at f023ffcc (2026-10-02). The Ctrl shortcut list in Decision B was checked against a local copy dated 2026-09-25 and has not been re-checked on f023ffcc.
 
 ## 2. What ports
 - `crosshairOutline(center, thicknessPx, spanPx, diagonal)` in `src/core/geom.js`: returns the 12 corner points of the "+" outline (or the "×" when `diagonal` is true). It has no DOM and no globals.
@@ -44,7 +44,7 @@ These exist only because the add-on is pasted into the console:
 - Shown for route, flex, extend, transition and branch, from the moment the tool is picked, before the first click. That's the same rule as native's guide circle (no `route.status` check).
 
 ## 6. Decisions for Kresna / the engineer
-**A. Width source.** The add-on reads `__graphDebug.route.profile`. The guide circle reads `store.currentPageState.inspectorFacts.profile` via `currentToolProfileWidthInches()`. Finding: in the 2026-09-25 copy, the `__graphDebug.route` getter returns exactly `inspectorFacts?.profile`, so today they are the same value and can't disagree. Please confirm, and decide which one the port should read.
+**A. Width source.** The add-on reads `__graphDebug.route.profile`. The guide circle reads `store.currentPageState.inspectorFacts.profile` via `currentToolProfileWidthInches()`. Finding: on f023ffcc, the `__graphDebug.route` getter returns exactly `inspectorFacts?.profile`, so today they are the same value and can't disagree. Please confirm, and decide which one the port should read.
 
 **B. The Ctrl tap that switches "+" and "×".** Rule: press and release Ctrl with nothing in between (no other key, click or wheel), only while a drawing tool is active and not typing in a field. It never calls `preventDefault`. Native already uses Ctrl/Cmd for:
 - Select tool: Ctrl/Cmd+click (and the matching hover) reaches a duct side segment past equipment
