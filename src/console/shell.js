@@ -44,9 +44,11 @@
   // own condition exactly), so the crosshair is already visible before the
   // very first click of a run, not just mid-draw.
   // Thickness (CSS px) of the panel's thin mode.
-  const THIN_PX = 5;
+  const THIN_PX = 2.5;
   // Thickness (CSS px) of the red edge line itself.
   const EDGE_PX = 5;
+  // Thin mode's line is drawn at this opacity; duct-width mode stays opaque.
+  const THIN_ALPHA = 0.25;
   const DRAWING_TOOLS = ['route', 'flex', 'extend', 'transition', 'branch'];
 
   // ----- overlay layer -----
@@ -154,6 +156,7 @@
     ctx.strokeStyle = '#e11d1d';
     ctx.lineWidth = EDGE_PX * dpr;
     ctx.lineJoin = 'miter';
+    if (thin) ctx.globalAlpha = THIN_ALPHA;
     ctx.stroke();
     ctx.restore();
   }

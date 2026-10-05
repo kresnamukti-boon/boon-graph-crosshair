@@ -136,11 +136,11 @@ function makeCanvasContext() {
     _calls: calls,
     clearRect() { calls.push({ op: 'clearRect' }); },
     beginPath() { path = []; }, closePath() {},
-    stroke() { calls.push({ op: 'stroke', style: this.strokeStyle, lineWidth: this.lineWidth, pts: path.slice() }); },
+    stroke() { calls.push({ op: 'stroke', style: this.strokeStyle, lineWidth: this.lineWidth, alpha: this.globalAlpha, pts: path.slice() }); },
     moveTo(x, y) { path.push({ x, y }); },
     lineTo(x, y) { path.push({ x, y }); },
     fill() { calls.push({ op: 'fill' }); },
-    save() {}, restore() {}, arc() {},
+    save() { (this._st = this._st || []).push(this.globalAlpha); }, restore() { this.globalAlpha = this._st.pop(); }, arc() {},
     fillRect(x, y, width, height) { calls.push({ op: 'fillRect', x, y, width, height }); },
     strokeRect() {},
     translate(x, y) { calls.push({ op: 'translate', x, y }); },
@@ -529,14 +529,18 @@ function loadModule(win) {
 
     thinBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
-    ok(thinBtn.textContent === 'Width: 5px', 'thin label flips');
+    ok(thinBtn.textContent === 'Width: 2.5px', 'thin label flips');
     ok(win.__RW._crosshairState().thin === true, 'state reports thin');
-    const tp = fills().pop().pts;
-    ok(Math.abs((tp[11].y - tp[0].y) - 5) < 1e-6, `arms are 5px wide in thin mode (got ${tp[11].y - tp[0].y})`);
+    const tstroke = fills().pop();
+    const tp = tstroke.pts;
+    ok(tstroke.alpha === 0.25, `thin line is 25% opacity (got ${tstroke.alpha})`);
+    ok(Math.abs((tp[11].y - tp[0].y) - 2.5) < 1e-6, `arms are 2.5px wide in thin mode (got ${tp[11].y - tp[0].y})`);
 
     thinBtn.dispatchEvent({ type: 'click' });
     raf.runOneFrame();
-    const bp = fills().pop().pts;
+    const bstroke = fills().pop();
+    const bp = bstroke.pts;
+    ok(bstroke.alpha !== 0.25, 'duct-width mode stays opaque');
     ok(Math.abs((bp[11].y - bp[0].y) - 50) < 1e-6, 'back to duct width');
 
     onBtn.dispatchEvent({ type: 'click' });
